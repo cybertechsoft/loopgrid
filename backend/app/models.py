@@ -77,8 +77,9 @@ class Decision(Base):
     def output(self):
         return json.loads(self.output_data) if self.output_data else {}
     
+    # FIXED: Renamed from 'metadata' to 'meta' to avoid conflict with SQLAlchemy's Base.metadata
     @property
-    def metadata(self):
+    def meta(self):
         return json.loads(self.metadata_data) if self.metadata_data else None
     
     @property
@@ -101,8 +102,9 @@ class Decision(Base):
             result["prompt"] = self.prompt
         if self.tool_calls:
             result["tool_calls"] = self.tool_calls
-        if self.metadata:
-            result["metadata"] = self.metadata
+        # FIXED: Changed from self.metadata to self.meta
+        if self.meta:
+            result["metadata"] = self.meta
         if self.incorrect_reason:
             result["incorrect_reason"] = self.incorrect_reason
             result["incorrect_at"] = self.incorrect_at.isoformat() if self.incorrect_at else None
