@@ -1,0 +1,41 @@
+{
+  "name": "loopgrid",
+  "version": "0.1.0",
+  "description": "Control plane for AI decision reliability",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src/",
+    "build": "echo 'No build step required'"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "decisions",
+    "replay",
+    "debugging",
+    "machine-learning",
+    "infrastructure",
+    "openai",
+    "anthropic",
+    "observability"
+  ],
+  "author": "Cybertech",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cybertech/loopgrid.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cybertech/loopgrid/issues"
+  },
+  "homepage": "https://github.com/cybertech/loopgrid#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0"
+  }
+}

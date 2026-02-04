@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LoopGrid Decision",
+  "description": "Schema for an AI decision in the LoopGrid ledger",
+  "type": "object",
+  "required": ["service_name", "decision_type", "input", "model", "output"],
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "description": "Unique identifier for the decision",
+      "pattern": "^dec_[a-f0-9]{12}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the decision was recorded"
+    },
+    "service_name": {
+      "type": "string",
+      "description": "Name of the service that made the decision",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "decision_type": {
+      "type": "string",
+      "description": "Type/category of decision",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "input": {
+      "type": "object",
+      "description": "The input that triggered the decision"
+    },
+    "model": {
+      "type": "object",
+      "description": "Information about the AI model used",
+      "properties": {
+        "provider": {"type": "string"},
+        "name": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "required": ["provider", "name"]
+    },
+    "prompt": {
+      "type": "object",
+      "description": "Prompt template and variables used",
+      "properties": {
+        "template": {"type": "string"},
+        "text": {"type": "string"},
+        "variables": {"type": "object"}
+      }
+    },
+    "tool_calls": {
+      "type": "array",
+      "description": "Tool/function calls made during execution",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "input": {"type": "object"},
+          "output": {"type": "object"}
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "description": "The AI's output/response"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["recorded", "incorrect", "corrected"],
+      "description": "Current status of the decision"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata",
+      "properties": {
+        "latency_ms": {"type": "number"},
+        "tokens": {"type": "number"}
+      }
+    }
+  }
+}

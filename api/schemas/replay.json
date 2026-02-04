@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LoopGrid Replay",
+  "description": "Schema for a replay in the LoopGrid system",
+  "type": "object",
+  "required": ["decision_id"],
+  "properties": {
+    "replay_id": {
+      "type": "string",
+      "description": "Unique identifier for the replay",
+      "pattern": "^rep_[a-f0-9]{12}$"
+    },
+    "decision_id": {
+      "type": "string",
+      "description": "ID of the original decision being replayed",
+      "pattern": "^dec_[a-f0-9]{12}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the replay was created"
+    },
+    "triggered_by": {
+      "type": "string",
+      "description": "Who/what triggered the replay",
+      "default": "sdk"
+    },
+    "overrides": {
+      "type": "object",
+      "description": "Overrides applied to the replay",
+      "properties": {
+        "prompt": {
+          "type": "object",
+          "description": "Override for prompt"
+        },
+        "model": {
+          "type": "object",
+          "description": "Override for model"
+        },
+        "input": {
+          "type": "object",
+          "description": "Override for input"
+        }
+      }
+    },
+    "replay_output": {
+      "type": "object",
+      "description": "The output from the replay execution"
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": ["pending", "running", "completed", "failed"],
+      "description": "Status of replay execution"
+    },
+    "output_changed": {
+      "type": "boolean",
+      "description": "Whether the output differed from original"
+    },
+    "diff_summary": {
+      "type": "string",
+      "description": "Summary of differences"
+    }
+  }
+}

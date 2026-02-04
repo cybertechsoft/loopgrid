@@ -1,0 +1,25 @@
+# LoopGrid Dependencies
+# Control Plane for AI Decision Reliability
+
+# Web Framework
+fastapi==0.109.0
+uvicorn==0.27.0
+
+# Database
+sqlalchemy==2.0.25
+
+# HTTP Client (SDK)
+requests==2.31.0
+
+# Validation
+pydantic==2.5.3
+
+# Utilities
+python-dateutil==2.8.2
+
+# ============================================================
+# Optional: AI Provider SDKs (for real AI integration)
+# ============================================================
+# pip install openai      # OpenAI (GPT-3.5, GPT-4)
+# pip install anthropic   # Anthropic (Claude)
+# pip install mistralai   # Mistral
