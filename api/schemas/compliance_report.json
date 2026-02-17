@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LoopGrid Compliance Report",
+  "description": "Compliance report mapping to EU AI Act requirements",
+  "type": "object",
+  "properties": {
+    "report_type": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "total": { "type": "integer" },
+        "recorded": { "type": "integer" },
+        "incorrect": { "type": "integer" },
+        "corrected": { "type": "integer" },
+        "correction_rate": { "type": "number" },
+        "error_rate": { "type": "number" }
+      }
+    },
+    "ledger_integrity": {
+      "type": "object",
+      "properties": {
+        "valid": { "type": "boolean" },
+        "total": { "type": "integer" },
+        "broken_at": { "type": ["string", "null"] },
+        "message": { "type": "string" }
+      }
+    },
+    "eu_ai_act_mapping": {
+      "type": "object",
+      "properties": {
+        "article_12_record_keeping": { "type": "object" },
+        "article_14_human_oversight": { "type": "object" },
+        "article_9_risk_management": { "type": "object" }
+      }
+    }
+  }
+}

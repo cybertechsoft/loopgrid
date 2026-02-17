@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  loopgrid:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - LOOPGRID_DATABASE_URL=sqlite:///./loopgrid.db
+      # Optional: Set for live replay execution
+      # - OPENAI_API_KEY=sk-...
+      # - ANTHROPIC_API_KEY=sk-ant-...
+    volumes:
+      - loopgrid-data:/app
+
+volumes:
+  loopgrid-data:

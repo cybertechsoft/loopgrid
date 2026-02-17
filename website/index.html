@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoopGrid — Control Plane for AI Decision Reliability</title>
+  <meta name="description" content="A system of record for AI decisions. Cryptographic immutability, live LLM replay, EU AI Act compliance reports.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-primary: #09090b;
+      --bg-secondary: #18181b;
+      --bg-elevated: #1f1f23;
+      --border: #27272a;
+      --border-subtle: #3f3f46;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-tertiary: #71717a;
+      --accent: #10b981;
+      --accent-subtle: rgba(16, 185, 129, 0.1);
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    
+    body {
+      font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+    h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(9, 9, 11, 0.85); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-primary); }
+    .logo-mark { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), var(--blue)); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+    .logo-mark span { font-size: 18px; }
+    .logo-text { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 1.125rem; }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-link { padding: 8px 16px; color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; font-weight: 500; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+    .nav-link:hover { color: var(--text-primary); background: var(--bg-secondary); }
+    .nav-cta { margin-left: 8px; padding: 8px 16px; background: var(--text-primary); color: var(--bg-primary); text-decoration: none; font-size: 0.875rem; font-weight: 600; border-radius: 6px; }
+
+    .hero { padding: 160px 0 100px; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; background: var(--accent-subtle); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 100px; font-size: 0.8125rem; font-weight: 500; color: var(--accent); margin-bottom: 24px; }
+    .hero-title { font-size: clamp(2.5rem, 6vw, 4rem); max-width: 800px; margin-bottom: 24px; }
+    .hero-gradient { background: linear-gradient(135deg, var(--accent), var(--blue), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero-description { font-size: 1.25rem; color: var(--text-secondary); max-width: 600px; margin-bottom: 40px; line-height: 1.7; }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 0.9375rem; font-weight: 600; text-decoration: none; border-radius: 8px; transition: all 0.15s; border: none; cursor: pointer; }
+    .btn-primary { background: var(--text-primary); color: var(--bg-primary); }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,255,255,0.15); }
+    .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--bg-secondary); }
+    .btn-icon { width: 16px; height: 16px; }
+
+    .section { padding: 100px 0; }
+    .section-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); margin-bottom: 16px; }
+    .section-title { font-size: clamp(1.75rem, 4vw, 2.5rem); margin-bottom: 16px; }
+    .section-desc { font-size: 1.125rem; color: var(--text-secondary); max-width: 600px; line-height: 1.7; }
+
+    .problem-section { border-top: 1px solid var(--border); }
+    .problem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 64px; }
+    @media (max-width: 768px) { .problem-grid { grid-template-columns: 1fr; } }
+    .problem-card { padding: 32px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; }
+    .problem-card-num { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 16px; }
+    .problem-card h3 { font-size: 1.125rem; margin-bottom: 8px; }
+    .problem-card p { font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.6; }
+
+    .arch-section { background: var(--bg-secondary); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .arch-content { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; margin-top: 64px; }
+    @media (max-width: 900px) { .arch-content { grid-template-columns: 1fr; gap: 48px; } }
+    .arch-features { display: flex; flex-direction: column; gap: 32px; }
+    .arch-feature { display: flex; gap: 16px; }
+    .arch-feature-icon { width: 44px; height: 44px; background: var(--accent-subtle); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 20px; }
+    .arch-feature h4 { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+    .arch-feature p { font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.5; }
+
+    .code-section { border-bottom: 1px solid var(--border); }
+    .code-block { margin-top: 48px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .code-header { display: flex; align-items: center; padding: 12px 20px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); }
+    .code-dots { display: flex; gap: 8px; }
+    .code-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .code-dot-red { background: #ff5f57; }
+    .code-dot-yellow { background: #febc2e; }
+    .code-dot-green { background: #28c840; }
+    .code-filename { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 0.8125rem; color: var(--text-tertiary); }
+    .code-body { padding: 24px; overflow-x: auto; }
+    .code-body pre { font-family: 'IBM Plex Mono', monospace; font-size: 0.875rem; line-height: 1.7; color: var(--text-secondary); }
+    .code-body .kw { color: #c084fc; }
+    .code-body .str { color: #4ade80; }
+    .code-body .cmt { color: #52525b; }
+    .code-body .fn { color: #60a5fa; }
+
+    .cta-section { text-align: center; padding: 120px 0; }
+    .cta-title { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 16px; }
+    .cta-desc { font-size: 1.125rem; color: var(--text-secondary); margin-bottom: 40px; }
+    .cta-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+
+    .footer { border-top: 1px solid var(--border); padding: 40px 0; }
+    .footer-inner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    .footer-text { font-size: 0.875rem; color: var(--text-tertiary); }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { font-size: 0.875rem; color: var(--text-secondary); text-decoration: none; }
+    .footer-links a:hover { color: var(--text-primary); }
+
+    @media (max-width: 640px) { .nav-links { display: none; } .hero { padding: 120px 0 80px; } }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="#" class="logo">
+        <div class="logo-mark"><span>&#x27F2;</span></div>
+        <span class="logo-text">LoopGrid</span>
+      </a>
+      <div class="nav-links">
+        <a href="#problem" class="nav-link">Problem</a>
+        <a href="#architecture" class="nav-link">Architecture</a>
+        <a href="#code" class="nav-link">SDK</a>
+        <a href="https://github.com/cybertechsoft/loopgrid" class="nav-cta">GitHub &rarr;</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">&#x26A1; Open Source &middot; EU AI Act Ready</div>
+      <h1 class="hero-title">The control plane for<br><span class="hero-gradient">AI decision reliability</span></h1>
+      <p class="hero-description">Cryptographically immutable decision records, live LLM replay engine, human correction loop, and EU AI Act compliance reports. Infrastructure, not a dashboard.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/cybertechsoft/loopgrid" class="btn btn-primary">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+        <a href="#architecture" class="btn btn-secondary">How it works</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="problem" class="section problem-section">
+    <div class="container">
+      <div class="section-label">The Problem</div>
+      <h2 class="section-title">AI decisions are opaque</h2>
+      <p class="section-desc">AI systems make critical decisions in production. When they fail, teams can't trace, debug, or prove compliance.</p>
+      <div class="problem-grid">
+        <div class="problem-card">
+          <div class="problem-card-num">01</div>
+          <h3>No traceability</h3>
+          <p>Which prompt was used? What model version? Logs are scattered and incomplete.</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-num">02</div>
+          <h3>No reproducibility</h3>
+          <p>You can't re-run a failed decision with different parameters. Every debug starts from scratch.</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-num">03</div>
+          <h3>No compliance</h3>
+          <p>EU AI Act requires auditable records. Most teams have nothing to show regulators.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="architecture" class="section arch-section">
+    <div class="container">
+      <div class="section-label">Architecture</div>
+      <h2 class="section-title">Infrastructure, not a dashboard</h2>
+      <p class="section-desc">LoopGrid sits underneath your AI apps. SDK-first, API-driven, cryptographically verifiable.</p>
+      <div class="arch-content">
+        <div class="arch-features">
+          <div class="arch-feature">
+            <div class="arch-feature-icon">&#x1F512;</div>
+            <div><h4>Immutable Hash Chain</h4><p>Every decision SHA-256 hashed and chained to the previous one. Tamper-evident ledger.</p></div>
+          </div>
+          <div class="arch-feature">
+            <div class="arch-feature-icon">&#x1F501;</div>
+            <div><h4>Live Replay Engine</h4><p>Fork past decisions with real LLM API calls. Compare outputs side-by-side.</p></div>
+          </div>
+          <div class="arch-feature">
+            <div class="arch-feature-icon">&#x2713;</div>
+            <div><h4>Human Correction Loop</h4><p>Attach corrections as immutable ground truth for systematic learning.</p></div>
+          </div>
+          <div class="arch-feature">
+            <div class="arch-feature-icon">&#x1F4CB;</div>
+            <div><h4>Compliance Reports</h4><p>EU AI Act Article 12/14/9 mapping. JSON + printable HTML for auditors.</p></div>
+          </div>
+        </div>
+        <div style="background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px; padding: 40px;">
+          <svg viewBox="0 0 400 320" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+            <rect x="40" y="20" width="320" height="50" rx="8" fill="#1f1f23" stroke="#3f3f46"/>
+            <text x="200" y="42" text-anchor="middle" fill="#a1a1aa" font-family="IBM Plex Sans" font-size="11">Your AI Application</text>
+            <text x="200" y="58" text-anchor="middle" fill="#71717a" font-family="IBM Plex Mono" font-size="10">(Support Bot, Sales Agent, etc.)</text>
+            <path d="M200 70 L200 95" stroke="#3f3f46" stroke-width="2"/>
+            <path d="M195 90 L200 100 L205 90" fill="#3f3f46"/>
+            <rect x="80" y="100" width="240" height="45" rx="8" fill="#0d2818" stroke="#10b981" stroke-opacity="0.4"/>
+            <text x="200" y="120" text-anchor="middle" fill="#10b981" font-family="IBM Plex Sans" font-size="11" font-weight="600">LoopGrid SDK</text>
+            <text x="200" y="136" text-anchor="middle" fill="#71717a" font-family="IBM Plex Mono" font-size="10">grid.record_decision()</text>
+            <path d="M200 145 L200 170" stroke="#3f3f46" stroke-width="2"/>
+            <path d="M195 165 L200 175 L205 165" fill="#3f3f46"/>
+            <rect x="20" y="175" width="360" height="130" rx="10" fill="#18181b" stroke="#27272a"/>
+            <text x="200" y="197" text-anchor="middle" fill="#fafafa" font-family="IBM Plex Sans" font-size="12" font-weight="600">LoopGrid Control Plane</text>
+            <rect x="30" y="210" width="80" height="45" rx="6" fill="#1f1f23" stroke="#27272a"/>
+            <text x="70" y="230" text-anchor="middle" fill="#10b981" font-family="IBM Plex Sans" font-size="9" font-weight="500">Ledger</text>
+            <text x="70" y="245" text-anchor="middle" fill="#71717a" font-family="IBM Plex Sans" font-size="8">(hash chain)</text>
+            <rect x="118" y="210" width="80" height="45" rx="6" fill="#1f1f23" stroke="#27272a"/>
+            <text x="158" y="230" text-anchor="middle" fill="#3b82f6" font-family="IBM Plex Sans" font-size="9" font-weight="500">Replay</text>
+            <text x="158" y="245" text-anchor="middle" fill="#71717a" font-family="IBM Plex Sans" font-size="8">(live LLM)</text>
+            <rect x="206" y="210" width="80" height="45" rx="6" fill="#1f1f23" stroke="#27272a"/>
+            <text x="246" y="230" text-anchor="middle" fill="#8b5cf6" font-family="IBM Plex Sans" font-size="9" font-weight="500">Correction</text>
+            <text x="246" y="245" text-anchor="middle" fill="#71717a" font-family="IBM Plex Sans" font-size="8">(ground truth)</text>
+            <rect x="294" y="210" width="80" height="45" rx="6" fill="#1f1f23" stroke="#27272a"/>
+            <text x="334" y="230" text-anchor="middle" fill="#f59e0b" font-family="IBM Plex Sans" font-size="9" font-weight="500">Compliance</text>
+            <text x="334" y="245" text-anchor="middle" fill="#71717a" font-family="IBM Plex Sans" font-size="8">(EU AI Act)</text>
+            <text x="200" y="290" text-anchor="middle" fill="#52525b" font-family="IBM Plex Mono" font-size="9">GET /v1/integrity/verify  •  GET /v1/compliance/report</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="code" class="section code-section">
+    <div class="container">
+      <div class="section-label">SDK</div>
+      <h2 class="section-title">One line to capture, one line to replay</h2>
+      <p class="section-desc">Minimal SDK. Hash chain built in. Live replay or simulation. Python and JavaScript.</p>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><div class="code-dot code-dot-red"></div><div class="code-dot code-dot-yellow"></div><div class="code-dot code-dot-green"></div></div>
+          <span class="code-filename">example.py</span>
+        </div>
+        <div class="code-body"><pre><span class="kw">from</span> loopgrid <span class="kw">import</span> LoopGrid
+
+grid = LoopGrid(service_name=<span class="str">"support-agent"</span>)
+
+<span class="cmt"># Record every AI decision (cryptographically hashed)</span>
+decision = grid.<span class="fn">record_decision</span>(
+    decision_type=<span class="str">"customer_support_reply"</span>,
+    input={<span class="str">"message"</span>: <span class="str">"I was charged twice"</span>},
+    model={<span class="str">"provider"</span>: <span class="str">"openai"</span>, <span class="str">"name"</span>: <span class="str">"gpt-4"</span>},
+    output={<span class="str">"response"</span>: <span class="str">"Your account looks fine."</span>}
+)
+
+<span class="cmt"># Replay with live LLM re-execution</span>
+replay = grid.<span class="fn">create_replay</span>(
+    decision_id=decision[<span class="str">"decision_id"</span>],
+    overrides={<span class="str">"prompt"</span>: {<span class="str">"template"</span>: <span class="str">"support_v2"</span>}}
+)
+
+<span class="cmt"># Verify ledger integrity</span>
+grid.<span class="fn">verify_integrity</span>()  <span class="cmt"># {"valid": True, "total": 1, ...}</span>
+
+<span class="cmt"># Generate EU AI Act compliance report</span>
+grid.<span class="fn">compliance_report</span>()  <span class="cmt"># Article 12, 14, 9 mapping</span></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="container">
+      <h2 class="cta-title">Start building reliable AI</h2>
+      <p class="cta-desc">Open source. Self-hosted. EU AI Act ready. No vendor lock-in.</p>
+      <div class="cta-actions">
+        <a href="https://github.com/cybertechsoft/loopgrid" class="btn btn-primary">View on GitHub</a>
+        <a href="https://github.com/cybertechsoft/loopgrid#quick-start" class="btn btn-secondary">Quick Start &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <p class="footer-text">LoopGrid &mdash; Control Plane for AI Decision Reliability</p>
+      <div class="footer-links">
+        <a href="https://github.com/cybertechsoft/loopgrid">GitHub</a>
+        <a href="https://pypi.org/project/loopgrid/">PyPI</a>
+        <a href="https://www.npmjs.com/package/@cybertechsoft/loopgrid">npm</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

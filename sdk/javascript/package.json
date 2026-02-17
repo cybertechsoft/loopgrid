@@ -1,0 +1,20 @@
+{
+  "name": "@cybertechsoft/loopgrid",
+  "version": "0.1.0",
+  "description": "Control plane for AI decision reliability",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src/"
+  },
+  "keywords": ["ai", "llm", "decisions", "replay", "compliance", "eu-ai-act", "infrastructure"],
+  "author": "Cybertechsoft",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cybertechsoft/loopgrid.git"
+  },
+  "bugs": { "url": "https://github.com/cybertechsoft/loopgrid/issues" },
+  "homepage": "https://github.com/cybertechsoft/loopgrid#readme",
+  "engines": { "node": ">=14.0.0" }
+}

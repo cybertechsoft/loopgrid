@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LoopGrid Decision",
+  "type": "object",
+  "required": ["service_name", "decision_type", "input", "model", "output"],
+  "properties": {
+    "decision_id": { "type": "string", "pattern": "^dec_[a-f0-9]{12}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "service_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "decision_type": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "input": { "type": "object" },
+    "model": { "type": "object", "properties": { "provider": {"type": "string"}, "name": {"type": "string"}, "version": {"type": "string"} }, "required": ["provider", "name"] },
+    "prompt": { "type": "object" },
+    "output": { "type": "object" },
+    "status": { "type": "string", "enum": ["recorded", "incorrect", "corrected"] },
+    "content_hash": { "type": "string" },
+    "chain_hash": { "type": "string" },
+    "metadata": { "type": "object" }
+  }
+}
