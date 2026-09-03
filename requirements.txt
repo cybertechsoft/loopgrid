@@ -1,28 +1,11 @@
-# LoopGrid Dependencies
-# Control Plane for AI Decision Reliability
-
-# Web Framework
-fastapi==0.115.0
-uvicorn==0.27.0
-
-# Database
-sqlalchemy==2.0.25
-
-# HTTP Client (SDK)
-requests==2.31.0
-
-# Validation
-pydantic==2.5.3
-
-# Utilities
-python-dateutil==2.8.2
-
-# Testing
-pytest>=7.0.0
-httpx>=0.24.0,<0.28.0
-
-# ============================================================
-# Optional: LLM SDKs (for live replay execution)
-# ============================================================
-# pip install openai      # OpenAI (GPT-4, etc.)
-# pip install anthropic   # Anthropic (Claude)
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+sqlalchemy>=2.0,<3
+pydantic>=2.7,<3
+cryptography>=42,<47
+httpx>=0.27,<1
+python-multipart>=0.0.9,<1
+psycopg[binary]>=3.2,<4
+pytest>=8,<10
+asn1crypto>=1.5,<2
+boto3>=1.35,<2

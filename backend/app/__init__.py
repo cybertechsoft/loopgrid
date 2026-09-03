@@ -1,1 +1,0 @@
-"""LoopGrid Backend Application"""

@@ -1,34 +1,15 @@
-# Python
+.env
+.venv/
 __pycache__/
-*.py[cod]
-*.egg-info/
+.pytest_cache/
+*.pyc
+*.db
+*.sqlite*
+data/
+real-test-output*/
+pilot-validation-output*/
 dist/
 build/
-*.egg
-
-# Environment
-.env
-venv/
-.venv/
-
-# Database
-*.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-htmlcov/
-.coverage
-
-# Node
+*.egg-info/
 node_modules/
-package-lock.json
+.DS_Store

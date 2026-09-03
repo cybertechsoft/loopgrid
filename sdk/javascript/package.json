@@ -1,20 +1,30 @@
 {
   "name": "@cybertechsoft/loopgrid",
-  "version": "0.1.0",
-  "description": "Control plane for AI decision reliability",
-  "main": "src/index.js",
-  "scripts": {
-    "test": "jest",
-    "lint": "eslint src/"
-  },
-  "keywords": ["ai", "llm", "decisions", "replay", "compliance", "eu-ai-act", "infrastructure"],
-  "author": "Cybertechsoft",
+  "version": "0.8.0",
+  "description": "TypeScript/JavaScript SDK for LoopGrid, the evidence plane for AI agents",
+  "main": "index.js",
+  "types": "index.d.ts",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cybertechsoft/loopgrid.git"
+    "url": "https://github.com/cybertechsoft/loopgrid.git"
   },
-  "bugs": { "url": "https://github.com/cybertechsoft/loopgrid/issues" },
-  "homepage": "https://github.com/cybertechsoft/loopgrid#readme",
-  "engines": { "node": ">=14.0.0" }
+  "homepage": "https://loopgrid.io",
+  "keywords": [
+    "ai",
+    "agents",
+    "evidence",
+    "audit",
+    "provenance",
+    "llm"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ]
 }

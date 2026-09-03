@@ -1,17 +1,53 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: loopgrid
+      POSTGRES_USER: loopgrid
+      POSTGRES_PASSWORD: ${LOOPGRID_POSTGRES_PASSWORD:?Run python scripts/generate_pilot_env.py first}
+    volumes:
+      - loopgrid_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loopgrid -d loopgrid"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   loopgrid:
     build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
-      - LOOPGRID_DATABASE_URL=sqlite:///./loopgrid.db
-      # Optional: Set for live replay execution
-      # - OPENAI_API_KEY=sk-...
-      # - ANTHROPIC_API_KEY=sk-ant-...
+      LOOPGRID_DATABASE_URL: postgresql+psycopg://loopgrid:${LOOPGRID_POSTGRES_PASSWORD}@db:5432/loopgrid
+      LOOPGRID_PLATFORM_ADMIN_KEY: ${LOOPGRID_PLATFORM_ADMIN_KEY:?Run python scripts/generate_pilot_env.py first}
+      LOOPGRID_ENV: production
+      LOOPGRID_PUBLIC_BASE_URL: ${LOOPGRID_PUBLIC_BASE_URL:-http://localhost:8000}
+      LOOPGRID_REQUIRE_USER_AUTH: "true"
+      LOOPGRID_STRICT_PRODUCTION_SAFETY: "true"
+      LOOPGRID_BOOTSTRAP_TOKEN: ${LOOPGRID_BOOTSTRAP_TOKEN:?Run python scripts/generate_pilot_env.py first}
+      LOOPGRID_CORS_ORIGINS: ${LOOPGRID_CORS_ORIGINS:-}
+      LOOPGRID_SIGNER_PROVIDER: ${LOOPGRID_SIGNER_PROVIDER:-local_ed25519}
+      LOOPGRID_SIGNING_KEY_PATH: /app/data/signing-key.pem
+      LOOPGRID_PUBLIC_KEY_PATH: /app/data/signing-public.pem
+      LOOPGRID_PAYLOAD_KEY_PATH: /app/data/payload-key.bin
+      LOOPGRID_PAYLOAD_MASTER_KEY_B64: ${LOOPGRID_PAYLOAD_MASTER_KEY_B64:?Run python scripts/generate_pilot_env.py first}
+      LOOPGRID_TSA_URL: ${LOOPGRID_TSA_URL:-}
+      LOOPGRID_TSA_CA_FILE: ${LOOPGRID_TSA_CA_FILE:-}
+      LOOPGRID_ENFORCE_LIFECYCLE: "true"
+      LOOPGRID_DB_POOL_SIZE: ${LOOPGRID_DB_POOL_SIZE:-10}
+      LOOPGRID_DB_MAX_OVERFLOW: ${LOOPGRID_DB_MAX_OVERFLOW:-20}
+      LOOPGRID_DB_POOL_RECYCLE_SECONDS: ${LOOPGRID_DB_POOL_RECYCLE_SECONDS:-1800}
+      LOOPGRID_MAX_REQUEST_BODY_BYTES: ${LOOPGRID_MAX_REQUEST_BODY_BYTES:-2000000}
+      LOOPGRID_INGEST_RATE_LIMIT_PER_MINUTE: ${LOOPGRID_INGEST_RATE_LIMIT_PER_MINUTE:-600}
+      LOOPGRID_ADMIN_RATE_LIMIT_PER_MINUTE: ${LOOPGRID_ADMIN_RATE_LIMIT_PER_MINUTE:-120}
     volumes:
-      - loopgrid-data:/app
+      - loopgrid_keys:/app/data
 
 volumes:
-  loopgrid-data:
+  loopgrid_pg:
+  loopgrid_keys:

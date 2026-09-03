@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopgrid.io/schemas/decision-evidence-profile-3.0-draft.json",
+  "title": "LoopGrid Decision Evidence Envelope 3.0-draft",
+  "description": "Canonical decision-created envelope for LoopGrid Evidence Profile 3.0-draft. Event proofs and privacy projections are represented by the ledger/event API.",
+  "type": "object",
+  "required": ["spec_version", "decision_type", "service_name", "agent", "authority", "model", "context", "input", "proposed_action", "metadata"],
+  "properties": {
+    "spec_version": {"const": "loopgrid/3.0-draft"},
+    "decision_type": {"type": "string", "minLength": 1},
+    "service_name": {"type": "string", "minLength": 1},
+    "agent": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string"},
+        "version": {"type": "string"},
+        "deployment_sha": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "authority": {
+      "type": "object",
+      "properties": {
+        "acting_for": {"type": "string"},
+        "scope": {"type": "array", "items": {"type": "string"}},
+        "limit_usd": {"type": "number"}
+      },
+      "additionalProperties": true
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "provider": {"type": "string"},
+        "name": {"type": "string"},
+        "request_id": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "context": {"type": "object", "additionalProperties": true},
+    "input": {"type": "object", "additionalProperties": true},
+    "proposed_action": {
+      "type": "object",
+      "properties": {
+        "tool": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "metadata": {"type": "object", "additionalProperties": true}
+  },
+  "additionalProperties": false
+}

@@ -1,290 +1,205 @@
-# LoopGrid
+# LoopGrid v0.8 — Design Partner Release
 
-**The control plane for AI decision reliability.**
+**The evidence plane for AI agents.**
 
-A system of record for AI decisions. Capture every decision with cryptographic immutability, replay failures with live LLM re-execution, build ground truth from human corrections, and generate EU AI Act compliance reports.
+LoopGrid captures and seals the evidence around consequential AI/agent decisions: **agent identity, delegated authority, model/context, policy, human oversight, tool/action, observed outcome and cryptographic proof**. The result is a signed, tamper-evident record that can be exported and verified independently.
 
----
+> **Release posture:** approved for controlled design-partner technical evaluation. **Not Production GA.** Evidence integrity can support governance, audit and dispute workflows; it is not by itself a legal compliance determination.
 
-## The Problem
+## Why LoopGrid
 
-AI systems make critical decisions in production. When they fail, teams can't answer basic questions:
+Agent runtimes execute. Observability explains. Control planes govern. **LoopGrid proves what happened.**
 
-- Why did the AI produce this output?
-- Which prompt or model version was used?
-- How would the decision change with different parameters?
-- How do we systematically learn from human corrections?
-- Can we prove compliance to regulators?
+A consequential decision should answer:
 
-There is no system of record for AI decisions. Every failure is treated as a one-off.
+- Which agent/version acted?
+- What authority was delegated?
+- Which model/context informed the decision?
+- Which policy/version applied and what did it decide?
+- Was human oversight required and what happened?
+- Which external tool/action actually executed?
+- What outcome was observed?
+- Can an independent party verify the record later?
 
-## The Solution
+## Evidence lifecycle
 
-LoopGrid provides the missing infrastructure layer:
+```text
+CAPTURE → SEAL → VERIFY → INVESTIGATE → REVIEW → REPLAY → PROVE
+```
 
-| Component | What It Does |
-|-----------|--------------|
-| **Decision Ledger** | Immutable, hash-chained record of every AI decision |
-| **Replay Engine** | Fork past decisions with live LLM re-execution or simulation |
-| **Human Correction Loop** | Capture corrections as ground truth for learning |
-| **Compliance Reports** | EU AI Act Article 12/14/9 compliance mapping |
-| **Integrity Verification** | Cryptographic proof that the ledger hasn't been tampered with |
+The append-only decision lifecycle includes `decision_created`, `model_completed`, `policy_evaluated`, human review events, tool/action evidence, `outcome_observed` and optional later replay/adjudication events. LoopGrid derives the current state from that history and rejects impossible consequential-event ordering.
 
-## Quick Start
+## v0.8 highlights
 
-### Installation
+- PostgreSQL-backed Docker deployment path.
+- Production-mode safety guard for auth, secrets, PostgreSQL and CORS.
+- Workspace-scoped API keys and human RBAC.
+- SHA-256 workspace hash chains + persistent local Ed25519 signing.
+- Signed workspace checkpoints.
+- Portable Evidence Bundle v2 / Evidence Profile `3.0-draft`.
+- Signer-pinned standalone verifier.
+- FULL / REDACTED / PROOF-ONLY privacy modes.
+- AES-256-GCM disclosure vault with erasable payloads.
+- Deterministic policy provenance and human-review evidence.
+- REST, Python, TypeScript/JavaScript, OpenTelemetry/OTLP and MCP paths.
+- Optional live OpenAI/Anthropic replay/provider validation helpers.
+- Optional RFC3161 timestamp and AWS KMS adapter paths.
+
+## Quickest design-partner deployment
+
+Requires Docker Desktop/Engine and Python 3.10+.
+
+```powershell
+python scripts\generate_pilot_env.py
+powershell -ExecutionPolicy Bypass -File .\validate_pilot.ps1
+```
+
+The first command generates strong local secrets into `.env` without printing them. The second starts PostgreSQL + LoopGrid and runs the deployment validation gate.
+
+Do **not** run `docker compose down -v` unless you intentionally want to destroy local pilot data.
+
+## Local development
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pytest -q
+python run.py
+```
+
+Open:
+
+- UI: `http://127.0.0.1:8000/`
+- OpenAPI: `http://127.0.0.1:8000/docs`
+- readiness: `http://127.0.0.1:8000/ready`
+- trust posture: `http://127.0.0.1:8000/api/v1/system/info`
+
+## Python SDK
 
 ```bash
 pip install loopgrid
 ```
 
-### Basic Usage
-
 ```python
 from loopgrid import LoopGrid
 
-# Initialize
-grid = LoopGrid(service_name="support-agent")
+lg = LoopGrid(base_url="http://localhost:8000", api_key="lg_live_...")
 
-# Record an AI decision (cryptographically hashed and chained)
-decision = grid.record_decision(
-    decision_type="customer_support_reply",
-    input={"message": "I was charged twice"},
-    model={"provider": "openai", "name": "gpt-4"},
-    prompt={"template": "support_v1"},
-    output={"response": "Your account looks fine."}
+d = lg.record_decision(
+    decision_type="customer_refund",
+    agent={"id": "support-agent", "version": "1.0"},
+    authority={"acting_for": "Acme", "limit_usd": 1500, "scope": ["refund:create"]},
+    model={"provider": "openai", "name": "gpt-5"},
+    context={"prompt_version": "support-v1"},
+    proposed_action={"tool": "stripe.refunds.create", "amount": 1000, "currency": "USD"},
 )
 
-# Mark as incorrect
-grid.mark_incorrect(decision["decision_id"], reason="Missed billing issue")
-
-# Replay with different prompt (live LLM call if API key set, otherwise simulated)
-replay = grid.create_replay(
-    decision_id=decision["decision_id"],
-    overrides={"prompt": {"template": "support_v2"}}
-)
-
-# Attach human correction as ground truth
-grid.attach_correction(
-    decision_id=decision["decision_id"],
-    correction={"response": "I see the duplicate charge. Refund initiated."},
-    corrected_by="agent_42"
-)
-
-# Verify ledger integrity
-integrity = grid.verify_integrity()
-print(integrity)  # {"valid": True, "total": 1, ...}
-
-# Generate compliance report
-report = grid.compliance_report()
-print(report["eu_ai_act_mapping"]["article_12_record_keeping"]["status"])
+print(d["decision_id"])
 ```
 
-### Run Locally
+See `examples/refund_human_review.py` for the complete policy → human approval → action → outcome lifecycle.
 
-```bash
-# Clone the repo
-git clone https://github.com/cybertechsoft/loopgrid.git
-cd loopgrid
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the server
-python run_server.py
-
-# Run the demo (in another terminal)
-python test_demo.py
-
-# Run tests
-python -m pytest tests/ -v
-```
-
-### Docker
-
-```bash
-docker-compose up
-```
-
-### Live Replay (Optional)
-
-Set API keys to enable live LLM replay execution:
-
-```bash
-export OPENAI_API_KEY=sk-...
-export ANTHROPIC_API_KEY=sk-ant-...
-python run_server.py
-```
-
-Without API keys, replays use intelligent simulation mode.
-
-## Core Concepts
-
-### Decisions
-
-A **decision** is any AI output that matters. Each decision captures full context and is **cryptographically hashed** — content hash (SHA-256 of decision data) plus chain hash (linking to previous decision). This creates a tamper-evident ledger.
-
-### Replays
-
-A **replay** is a forked execution of a past decision. Replays support **live LLM re-execution** (calls OpenAI/Anthropic APIs with overrides) or **simulation mode** (pattern-based, no API key needed).
-
-### Corrections
-
-**Human corrections** are ground truth. When a human fixes an AI output, that correction is linked to the original decision and becomes part of the immutable record.
-
-### Compliance
-
-LoopGrid maps decision data to **EU AI Act** requirements:
-- **Article 12** — Record-keeping (automatic logging with hash chain integrity)
-- **Article 14** — Human oversight (correction loop, flagging mechanism)
-- **Article 9** — Risk management (error rate tracking, replay capability)
-
-## API Reference
-
-### REST API
-
-```
-POST   /v1/decisions                          Record a decision
-GET    /v1/decisions/{id}                     Get decision
-GET    /v1/decisions                          List decisions
-POST   /v1/decisions/{id}/incorrect           Mark incorrect
-POST   /v1/decisions/{id}/correction          Attach correction
-GET    /v1/decisions/{id}/compare/{replay_id} Compare
-
-POST   /v1/replays                            Create replay
-GET    /v1/replays/{id}                       Get replay
-
-GET    /v1/integrity/verify                   Verify hash chain
-GET    /v1/compliance/report                  JSON compliance report
-GET    /v1/compliance/report/html             Printable HTML report
-GET    /v1/export/decisions                   Export decisions (JSON/CSV)
-```
-
-Full OpenAPI docs at `http://localhost:8000/docs` when running locally.
-
-### Python SDK
-
-```python
-from loopgrid import LoopGrid
-grid = LoopGrid(service_name="my-agent")
-
-grid.record_decision(...)       # Record to ledger
-grid.get_decision(id)           # Retrieve by ID
-grid.list_decisions(...)        # List with filters
-grid.mark_incorrect(id)         # Flag for review
-grid.attach_correction(...)     # Ground truth
-grid.create_replay(...)         # Fork execution
-grid.compare(dec_id, rep_id)    # Side-by-side
-grid.verify_integrity()         # Hash chain check
-grid.compliance_report()        # EU AI Act report
-```
-
-### JavaScript SDK
+## TypeScript / JavaScript SDK
 
 ```bash
 npm install @cybertechsoft/loopgrid
 ```
 
-```javascript
+```js
 const { LoopGrid } = require('@cybertechsoft/loopgrid');
-const grid = new LoopGrid({ serviceName: 'my-agent' });
+const lg = new LoopGrid({baseUrl:'http://localhost:8000', apiKey:process.env.LOOPGRID_SERVICE_KEY});
 
-await grid.recordDecision({ ... });
-await grid.verifyIntegrity();
-await grid.complianceReport();
+const d = await lg.recordDecision({
+  decision_type:'customer_refund',
+  agent:{id:'support-agent',version:'1.0'},
+  authority:{acting_for:'Acme',limit_usd:1500,scope:['refund:create']},
+  model:{provider:'openai',name:'gpt-5'},
+  context:{prompt_version:'support-v1'},
+  proposed_action:{tool:'stripe.refunds.create',amount:1000,currency:'USD'}
+});
 ```
 
-## Architecture
+TypeScript declarations ship with the npm package.
 
-```
-┌─────────────────────────────────────────────────────┐
-│              Your AI Application                    │
-│         (Support Bot, Sales Agent, etc.)            │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│                 LoopGrid SDK                        │
-│            grid.record_decision()                   │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│             LoopGrid Control Plane                  │
-│                                                     │
-│  ┌───────────┐ ┌──────────┐ ┌──────────┐ ┌───────┐  │
-│  │ Decision  │ │  Replay  │ │  Human   │ │Compli-│  │
-│  │  Ledger   │ │  Engine  │ │Correction│ │ ance  │  │
-│  │(hash chain│ │(live LLM)│ │  Loop    │ │Reports│  │
-│  └───────────┘ └──────────┘ └──────────┘ └───────┘  │
-└─────────────────────────────────────────────────────┘
+## Independent verification
+
+Export an evidence ZIP, then verify it without a running LoopGrid service:
+
+```powershell
+python verifier\loopgrid_verify.py evidence.zip
 ```
 
-## Design Principles
+For stronger out-of-band signer identity verification:
 
-1. **Decisions are immutable** — Cryptographically hashed and chained
-2. **Replay precedes automation** — Understand before you automate
-3. **Human correction is ground truth** — Corrections feed learning
-4. **APIs over UI** — Infrastructure-first, SDK-first
-5. **Narrow before broad** — Do one thing well
-
-## Project Structure
-
-```
-loopgrid/
-├── backend/app/
-│   ├── main.py              # FastAPI application
-│   ├── models.py            # Database models (hash chain)
-│   ├── hashing.py           # SHA-256 hash chain
-│   ├── llm_executor.py      # Live LLM replay execution
-│   ├── config.py            # Environment configuration
-│   ├── schemas.py           # Pydantic schemas
-│   ├── database.py          # Database setup
-│   └── routers/
-│       ├── decisions.py     # Decision CRUD + hashing
-│       ├── replays.py       # Replay engine
-│       ├── integrity.py     # Chain verification
-│       └── compliance.py    # EU AI Act reports
-├── sdk/
-│   ├── python/loopgrid/     # Python SDK
-│   └── javascript/src/      # JavaScript SDK
-├── tests/                   # Test suite
-├── api/schemas/             # JSON schemas
-├── examples/                # Usage examples
-├── docs/                    # Documentation
-└── website/                 # Landing page
+```powershell
+python verifier\loopgrid_verify.py evidence.zip --expected-key-id ed25519:...
 ```
 
-## Roadmap
+Portable consistency proof and signer trust are separate concepts. A bundle can be internally valid while the verifier still needs an out-of-band reason to trust the signer identity.
 
-- [x] Python SDK
-- [x] JavaScript SDK
-- [x] Decision ledger with hash chain
-- [x] Replay engine (live + simulated)
-- [x] Human correction loop
-- [x] Integrity verification
-- [x] EU AI Act compliance reports
-- [x] REST API with OpenAPI docs
-- [x] Test suite
-- [ ] PostgreSQL backend
-- [ ] Docker deployment
-- [ ] API authentication
-- [ ] OpenAI/Anthropic SDK wrappers
+## Privacy model
 
-## Contributing
+- **FULL** — raw disclosures encrypted separately; signed ledger stores commitment/reference.
+- **REDACTED** — selected values replaced by commitments.
+- **PROOF-ONLY** — only commitment/proof metadata retained.
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
+Encrypted disclosures can be erased later without rewriting the signed evidence chain.
 
-**What we accept:** SDK improvements, schema fixes, docs, examples, tests
+## Auth model
 
-**What we don't accept:** Dashboards, auto-fix features, scope expansion
+Service API-key scopes:
+
+- `ingest`
+- `read`
+- `review`
+- `admin`
+
+Human roles:
+
+- `owner`
+- `admin`
+- `reviewer`
+- `viewer`
+
+In production mode v0.8 refuses startup when auth is disabled or bootstrap/platform-admin secrets are missing/placeholder values.
+
+## Supported integrations
+
+Validated/foundation paths include REST, Python SDK, TypeScript/JavaScript SDK, OpenAI helper, Anthropic helper, LangGraph helper, OpenTelemetry/OTLP and allow-listed MCP proxy/ingestion.
+
+The canonical LoopGrid evidence schema remains provider-neutral. Do not couple your historical evidence model to a single vendor's telemetry schema.
+
+## Current validation posture
+
+The frozen v0.7.2 baseline passed the core regression suite, real-scenario, API-key lifecycle, human RBAC, MCP gateway, live OpenAI and RFC3161 protocol/imprint gates. On 2026-09-03 that baseline also passed the PostgreSQL/Docker full real scenario plus app restart, PostgreSQL restart, signer persistence, decision persistence and workspace chain-continuity validation.
+
+LoopGrid v0.8 then passed its full Windows/Docker design-partner deployment gate on 2026-09-03: PostgreSQL posture, production safety, anonymous-access blocking, scoped service identity creation/revocation, complete refund decision lifecycle, workspace cryptographic verification, tamper detection, signed checkpoint/head binding, signer-pinned offline verification, disclosure-withheld export and OTLP ingestion.
+
+Rerun the included validators in each new deployment environment before making environment-specific claims.
+
+## Explicit claim boundaries
+
+Do **not** describe LoopGrid evidence as physically “immutable”; use **signed** and **tamper-evident**.
+
+v0.8 does **not** by itself claim:
+
+- Production GA or a production SLA;
+- legal or regulatory compliance/certification;
+- live hardware-backed AWS KMS signing unless exercised in that deployment;
+- trusted RFC3161 TSA signer certificate-chain validation unless explicitly configured/tested;
+- validated multi-instance horizontal scaling.
+
+## Documentation
+
+- `docs/DECISION_EVIDENCE_PROFILE_3.0.md`
+- `docs/TRUST_MODEL.md`
+- `docs/DEPLOYMENT.md`
+- `docs/PILOT_SUCCESS_CRITERIA.md`
+- `DESIGN_PARTNER_GUIDE.md`
+- `SECURITY.md`
+- `CHANGELOG.md`
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE)
-
----
-
-**LoopGrid** — Control Plane for AI Decision Reliability
-
-[GitHub](https://github.com/cybertechsoft/loopgrid) · [PyPI](https://pypi.org/project/loopgrid/) · [npm](https://www.npmjs.com/package/@cybertechsoft/loopgrid)
+Apache 2.0.
