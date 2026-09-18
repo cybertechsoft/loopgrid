@@ -1,3 +1,25 @@
+# LoopGrid v0.8.1 — OTLP Interoperability
+
+## Added / changed
+
+- `/v1/traces` accepts OTLP/HTTP binary protobuf (`application/x-protobuf`) in addition to JSON.
+- OTLP/HTTP gzip request bodies are supported with decoded-size enforcement.
+- JSON and protobuf requests share one normalized trace-to-evidence mapping.
+- OTLP `AnyValue` parsing covers scalar, array, key/value-list and byte values.
+- Successful OTLP responses use the standard `ExportTraceServiceResponse` encoding and mirror the request content type.
+- `X-LoopGrid-Accepted` exposes the accepted-span count without adding non-standard fields to the OTLP response body.
+- Added malformed-body, unsupported-media-type, gzip, parity and protobuf regression tests.
+- CI updated to current GitHub Actions and multiple supported Python versions.
+- Added Dependabot and CodeQL workflow configuration.
+
+## Compatibility
+
+- Evidence Bundle v2, Evidence Profile `3.0-draft`, signing, checkpoints and the standalone verifier are unchanged.
+- GitHub Marketplace verifier `v1.0.0` does not require an update for this server-ingestion change.
+- Python and JavaScript SDK package APIs remain `0.8.0`; they are not republished unless their package code changes.
+
+---
+
 # LoopGrid v0.8.0 — Design Partner Release
 
 ## Focus

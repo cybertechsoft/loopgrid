@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .db import Base, engine, get_db
 from .models import LedgerEvent, Workspace, ApiKey, AuditLog, PolicyVersion, PayloadBlob, CheckpointRecord, UserAccount, WorkspaceMembership, UserSession, UsageEvent
-from .schemas import DecisionCreate, EventCreate, ReplayRequest, WorkspaceCreate, WorkspaceUpdate, ApiKeyCreate, ApiKeyRotateRequest, OTelIngest, PolicyCreate, PolicyEvaluate, ReviewRequest, MCPIngest, ErasePayloadRequest, HealthResponse, ReadyResponse, WorkspaceResponse, DashboardResponse, ApiKeyIssued, IntegrityResponse, DecisionResult, DecisionDetail, CheckpointResponse, RetentionResult, SystemInfoResponse, BootstrapUserRequest, LoginRequest, UserCreateRequest, MembershipRequest, AuthSessionResponse, OkResponse, HumanPrincipalResponse, MemberResponse, ApiKeyMetadataResponse, ApiKeyRotateResponse, UsageSummaryResponse, AuditEntryResponse, PolicyResponse, PolicyEvaluationResponse, DecisionSummaryResponse, LedgerEventResponse, ReviewItemResponse, ReviewResultResponse, ReplayResultResponse, MCPIngestResponse, OTLPAcceptResponse, PayloadStatusResponse, PayloadEraseResponse, IngestResult, PilotReadinessResponse
+from .schemas import DecisionCreate, EventCreate, ReplayRequest, WorkspaceCreate, WorkspaceUpdate, ApiKeyCreate, ApiKeyRotateRequest, OTelIngest, PolicyCreate, PolicyEvaluate, ReviewRequest, MCPIngest, ErasePayloadRequest, HealthResponse, ReadyResponse, WorkspaceResponse, DashboardResponse, ApiKeyIssued, IntegrityResponse, DecisionResult, DecisionDetail, CheckpointResponse, RetentionResult, SystemInfoResponse, BootstrapUserRequest, LoginRequest, UserCreateRequest, MembershipRequest, AuthSessionResponse, OkResponse, HumanPrincipalResponse, MemberResponse, ApiKeyMetadataResponse, ApiKeyRotateResponse, UsageSummaryResponse, AuditEntryResponse, PolicyResponse, PolicyEvaluationResponse, DecisionSummaryResponse, LedgerEventResponse, ReviewItemResponse, ReviewResultResponse, ReplayResultResponse, MCPIngestResponse, PayloadStatusResponse, PayloadEraseResponse, IngestResult, PilotReadinessResponse
 from .service import create_decision, add_event, get_events, list_decisions, summarize_decision, dashboard, evidence_coverage
 from .ledger import verify_ledger
 from .evidence import build_bundle, render_report
@@ -33,6 +33,15 @@ from .rate_limit import limiter
 from .user_auth import bearer_token_context,current_principal,create_user,add_membership,issue_session,verify_password,authenticate_session,revoke_session
 from .usage import usage_summary, record_usage
 from .lifecycle import LifecycleError
+from .otlp import (
+    OTLPHTTPError,
+    OTLP_JSON,
+    OTLP_PROTOBUF,
+    decode_trace_request,
+    error_response_body,
+    media_type_from_header,
+    success_response_body,
+)
 
 STARTED=time.time()
 assert_production_safe(settings)
@@ -65,7 +74,7 @@ if settings.cors_origins:
         allow_credentials=True,
         allow_methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
         allow_headers=["Authorization","Content-Type","X-LoopGrid-Key","X-LoopGrid-Workspace","X-Request-ID"],
-        expose_headers=["X-Request-ID"],
+        expose_headers=["X-Request-ID","X-LoopGrid-Accepted"],
     )
 STATIC=Path(__file__).parent/"static"; app.mount("/static",StaticFiles(directory=STATIC),name="static")
 
@@ -366,23 +375,59 @@ def ingest_otel(req:OTelIngest,x_loopgrid_key:str|None=Header(default=None),db:S
     for span in req.spans:
         a=span.attributes;d=create_decision(db,{"workspace_id":req.workspace_id,"decision_type":a.get("loopgrid.decision.type","genai_operation"),"service_name":a.get("service.name","otel-service"),"idempotency_key":f"otel:{span.trace_id}:{span.span_id}","agent":{"id":a.get("gen_ai.agent.name") or a.get("service.name","unknown-agent")},"model":{"provider":a.get("gen_ai.provider.name"),"name":a.get("gen_ai.request.model") or a.get("gen_ai.response.model")},"context":{"trace_id":span.trace_id,"span_id":span.span_id,"span_name":span.name},"input":{"prompt":a.get("gen_ai.prompt") or a.get("gen_ai.input.messages")},"proposed_action":{"tool":a.get("gen_ai.tool.name")},"metadata":{"source":"opentelemetry","capture_source":"otel-mapping","attributes":a}});created.append(d["decision_id"])
     return {"accepted":len(created),"decision_ids":created,"format":"loopgrid-otel-json"}
-def _otlp_value(v):
-    if not isinstance(v,dict):return v
-    for k in ("stringValue","boolValue","intValue","doubleValue"):
-        if k in v:return v[k]
-    if "arrayValue" in v:return [_otlp_value(x) for x in v.get("arrayValue",{}).get("values",[])]
-    return v
-def _otlp_attrs(attrs):return {a.get("key"):_otlp_value(a.get("value",{})) for a in (attrs or []) if a.get("key")}
-@app.post("/v1/traces",response_model=OTLPAcceptResponse,tags=["Ingestion"],summary="OTLP/HTTP JSON traces receiver")
+@app.post(
+    "/v1/traces",
+    tags=["Ingestion"],
+    summary="OTLP/HTTP traces receiver (protobuf + JSON)",
+    response_class=Response,
+    responses={
+        200:{"description":"OTLP ExportTraceServiceResponse","content":{"application/x-protobuf":{},"application/json":{}}},
+        400:{"description":"Malformed OTLP request"},
+        413:{"description":"OTLP request body too large"},
+        415:{"description":"Unsupported OTLP content type or content encoding"},
+    },
+    openapi_extra={"requestBody":{"content":{"application/x-protobuf":{"schema":{"type":"string","format":"binary"}},"application/json":{"schema":{"type":"object"}}}}},
+)
 async def ingest_otlp_http(request:Request,x_loopgrid_key:str|None=Header(default=None),x_loopgrid_workspace:str|None=Header(default=None),db:Session=Depends(get_db)):
-    wid=x_loopgrid_workspace or "default";_auth(db,x_loopgrid_key,wid,scope="ingest");body=await request.json();created=[]
-    for rs in body.get("resourceSpans",[]):
-        resource=_otlp_attrs((rs.get("resource") or {}).get("attributes",[]))
-        for ss in rs.get("scopeSpans",[]):
-            for sp in ss.get("spans",[]):
-                attrs={**resource,**_otlp_attrs(sp.get("attributes",[]))};trace=sp.get("traceId") or "unknown";sid=sp.get("spanId") or sha256_hex(canonical_json(sp))[:16]
-                d=create_decision(db,{"workspace_id":wid,"decision_type":attrs.get("loopgrid.decision.type","genai_operation"),"service_name":attrs.get("service.name","otlp-service"),"idempotency_key":f"otlp:{trace}:{sid}","agent":{"id":attrs.get("gen_ai.agent.name") or attrs.get("service.name","unknown-agent")},"model":{"provider":attrs.get("gen_ai.provider.name") or attrs.get("gen_ai.system"),"name":attrs.get("gen_ai.request.model") or attrs.get("gen_ai.response.model")},"context":{"trace_id":trace,"span_id":sid,"span_name":sp.get("name"),"scope":(ss.get("scope") or {}).get("name")},"input":{},"proposed_action":{"tool":attrs.get("gen_ai.tool.name")},"metadata":{"source":"otlp-http-json","capture_source":"otlp-http-json","attributes":attrs}});created.append(d["decision_id"])
-    return {"partialSuccess":{},"loopgrid":{"accepted":len(created),"decision_ids":created}}
+    wid=x_loopgrid_workspace or "default"
+    _auth(db,x_loopgrid_key,wid,scope="ingest")
+    request_media_type=media_type_from_header(request.headers.get("content-type"))
+    try:
+        media_type,spans=decode_trace_request(
+            await request.body(),
+            content_type=request.headers.get("content-type"),
+            content_encoding=request.headers.get("content-encoding"),
+            max_bytes=settings.max_request_body_bytes,
+        )
+    except OTLPHTTPError as exc:
+        response_type=request_media_type if request_media_type in {OTLP_JSON,OTLP_PROTOBUF} else OTLP_JSON
+        return Response(content=error_response_body(response_type,exc.message),status_code=exc.status_code,media_type=response_type)
+
+    created=[]
+    for sp in spans:
+        attrs=sp.attributes
+        trace=sp.trace_id or "unknown"
+        sid=sp.span_id or sha256_hex(canonical_json({"trace_id":trace,"name":sp.name,"attributes":attrs}))[:16]
+        d=create_decision(db,{
+            "workspace_id":wid,
+            "decision_type":attrs.get("loopgrid.decision.type","genai_operation"),
+            "service_name":attrs.get("service.name","otlp-service"),
+            "idempotency_key":f"otlp:{trace}:{sid}",
+            "agent":{"id":attrs.get("gen_ai.agent.name") or attrs.get("service.name","unknown-agent")},
+            "model":{"provider":attrs.get("gen_ai.provider.name") or attrs.get("gen_ai.system"),"name":attrs.get("gen_ai.request.model") or attrs.get("gen_ai.response.model")},
+            "context":{"trace_id":trace,"span_id":sid,"span_name":sp.name,"scope":sp.scope_name},
+            "input":{},
+            "proposed_action":{"tool":attrs.get("gen_ai.tool.name")},
+            "metadata":{"source":sp.source,"capture_source":sp.source,"otlp_encoding":"protobuf" if media_type==OTLP_PROTOBUF else "json","attributes":attrs},
+        })
+        created.append(d["decision_id"])
+
+    return Response(
+        content=success_response_body(media_type),
+        status_code=200,
+        media_type=media_type,
+        headers={"X-LoopGrid-Accepted":str(len(created))},
+    )
 @app.post("/api/v1/ingest/mcp",response_model=MCPIngestResponse,tags=["Ingestion"],summary="Capture MCP JSON-RPC tool evidence")
 def ingest_mcp(req:MCPIngest,x_loopgrid_key:str|None=Header(default=None),db:Session=Depends(get_db)):
     _auth(db,x_loopgrid_key,req.workspace_id,scope="ingest");method=req.request.get("method","unknown");params=req.request.get("params") or {};tool=params.get("name") if method=="tools/call" else method;idem=f"mcp:{req.trace_id or sha256_hex(canonical_json(req.request))[:20]}:{req.request.get('id','noid')}"

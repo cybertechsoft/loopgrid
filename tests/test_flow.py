@@ -192,7 +192,7 @@ def test_mcp_jsonrpc_ingestion():
 
 def test_otlp_http_json_receiver():
     reset(); otlp={'resourceSpans':[{'resource':{'attributes':[{'key':'service.name','value':{'stringValue':'agent-api'}}]},'scopeSpans':[{'scope':{'name':'openai.instrumentation'},'spans':[{'traceId':'abc','spanId':'def','name':'chat','attributes':[{'key':'gen_ai.provider.name','value':{'stringValue':'openai'}},{'key':'gen_ai.request.model','value':{'stringValue':'gpt-test'}}]}]}]}]}
-    r=client.post('/v1/traces',headers={'X-LoopGrid-Workspace':'default'},json=otlp); assert r.status_code==200 and r.json()['loopgrid']['accepted']==1
+    r=client.post('/v1/traces',headers={'X-LoopGrid-Workspace':'default','Content-Type':'application/json'},content=__import__('json').dumps(otlp).encode()); assert r.status_code==200 and r.headers['x-loopgrid-accepted']=='1' and r.json()=={}
     d=client.get('/api/v1/decisions').json()[0]; assert d['model']['provider']=='openai' and d['model']['name']=='gpt-test' and d['metadata']['source']=='otlp-http-json'
 
 def test_audit_log_and_operational_endpoints():
@@ -212,7 +212,7 @@ def test_demo_reset_restores_baseline_policy():
 
 def test_v07_system_info_and_openapi_contract():
     info=client.get('/api/v1/system/info');assert info.status_code==200
-    j=info.json();assert j['version'].startswith('0.8.0') and j['evidence_profile']=='3.0-draft'
+    j=info.json();assert j['version'].startswith('0.8.1') and j['evidence_profile']=='3.0-draft'
     assert j['payload_vault']['algorithm']=='AES-256-GCM' and j['payload_vault']['erasable_without_breaking_chain'] is True
     schema=client.get('/openapi.json').json();schemes=schema['components']['securitySchemes']
     assert 'LoopGridApiKey' in schemes and 'LoopGridUserBearer' in schemes
@@ -258,7 +258,7 @@ def test_checkpoint_is_persisted_and_exported(tmp_path):
     ev=client.get(f'/api/v1/decisions/{did}/evidence');p=tmp_path/'checkpoint.zip';p.write_bytes(ev.content)
     import zipfile,json
     with zipfile.ZipFile(p) as z:manifest=json.loads(z.read('manifest.json'))
-    assert manifest['checkpoint']['checkpoint_id']==cp['checkpoint_id'] and manifest['software_version'].startswith('0.8.0') and manifest['version']=='3.0-draft'
+    assert manifest['checkpoint']['checkpoint_id']==cp['checkpoint_id'] and manifest['software_version'].startswith('0.8.1') and manifest['version']=='3.0-draft'
 
 
 def test_human_rbac_bearer_sessions_and_roles():
@@ -332,7 +332,7 @@ def test_v07_dashboard_separates_completed_and_pending_reviews():
     reset();client.post('/api/v1/demo/workspace');client.post('/api/v1/demo/pending-review');d=client.get('/api/v1/dashboard').json();assert d['completed_reviews']==1 and d['human_approvals']==1 and d['human_rejections']==0 and d['pending_reviews']==1
 
 def test_v07_pilot_readiness_endpoint_discloses_gaps():
-    r=client.get('/api/v1/pilot/readiness');assert r.status_code==200;j=r.json();assert j['version'].startswith('0.8.0') and j['controlled_pilot_ready'] is True
+    r=client.get('/api/v1/pilot/readiness');assert r.status_code==200;j=r.json();assert j['version'].startswith('0.8.1') and j['controlled_pilot_ready'] is True
     ids={x['id']:x for x in j['checks']};assert ids['database']['status']=='pass' and ids['signed_ledger']['status']=='pass' and ids['payload_vault']['status']=='pass';assert 'signer_boundary' in ids and 'external_timestamp' in ids and 'database_topology' in ids
 
 
@@ -527,6 +527,6 @@ def test_v08_production_safety_guard_accepts_design_partner_config():
 
 def test_v08_system_info_exposes_deployment_security_posture():
     info=client.get('/api/v1/system/info').json()
-    assert info['version'].startswith('0.8.0')
+    assert info['version'].startswith('0.8.1')
     assert 'deployment_security' in info
     assert info['deployment_security']['strict_production_safety'] is True

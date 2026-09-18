@@ -532,10 +532,13 @@ def main() -> None:
         "POST",
         "/v1/traces",
         key=key,
-        headers={"X-LoopGrid-Workspace": workspace_id},
-        json=otlp,
-    ).json()
-    log("OTLP/HTTP JSON ingestion", otr.get("loopgrid", {}).get("accepted") == 1)
+        headers={"X-LoopGrid-Workspace": workspace_id, "Content-Type": "application/json"},
+        content=json.dumps(otlp).encode("utf-8"),
+    )
+    log(
+        "OTLP/HTTP JSON ingestion",
+        otr.headers.get("X-LoopGrid-Accepted") == "1" and otr.json() == {},
+    )
 
     result = {
         "validation_run_id": run_id,

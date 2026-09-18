@@ -29,6 +29,14 @@ CAPTURE → SEAL → VERIFY → INVESTIGATE → REVIEW → REPLAY → PROVE
 
 The append-only decision lifecycle includes `decision_created`, `model_completed`, `policy_evaluated`, human review events, tool/action evidence, `outcome_observed` and optional later replay/adjudication events. LoopGrid derives the current state from that history and rejects impossible consequential-event ordering.
 
+## v0.8.1 interoperability update
+
+- `/v1/traces` now accepts standard OTLP/HTTP binary protobuf and JSON trace payloads.
+- `Content-Encoding: gzip` is supported for OTLP/HTTP trace requests.
+- OTLP success responses now use the standard `ExportTraceServiceResponse` encoding and match the request `Content-Type`.
+- Decoded OTLP request bodies are bounded by `LOOPGRID_MAX_REQUEST_BODY_BYTES` to limit decompression expansion.
+- Existing evidence, signing, bundle and verifier formats are unchanged from v0.8.0.
+
 ## v0.8 highlights
 
 - PostgreSQL-backed Docker deployment path.
@@ -41,7 +49,7 @@ The append-only decision lifecycle includes `decision_created`, `model_completed
 - FULL / REDACTED / PROOF-ONLY privacy modes.
 - AES-256-GCM disclosure vault with erasable payloads.
 - Deterministic policy provenance and human-review evidence.
-- REST, Python, TypeScript/JavaScript, OpenTelemetry/OTLP and MCP paths.
+- REST, Python, TypeScript/JavaScript, OpenTelemetry/OTLP (HTTP protobuf + JSON) and MCP paths.
 - Optional live OpenAI/Anthropic replay/provider validation helpers.
 - Optional RFC3161 timestamp and AWS KMS adapter paths.
 
@@ -146,6 +154,27 @@ Portable consistency proof and signer trust are separate concepts. A bundle can 
 
 Encrypted disclosures can be erased later without rewriting the signed evidence chain.
 
+
+## OTLP/HTTP trace ingestion
+
+LoopGrid accepts OTLP trace exports on the standard `/v1/traces` path using either:
+
+- `Content-Type: application/x-protobuf` (recommended/default for many OpenTelemetry SDKs)
+- `Content-Type: application/json`
+- optional `Content-Encoding: gzip` for either encoding
+
+Example environment configuration:
+
+```bash
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:8000/v1/traces
+export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_TRACES_HEADERS="X-LoopGrid-Key=lg_live_...,X-LoopGrid-Workspace=default"
+```
+
+A successful OTLP export returns the standard empty `ExportTraceServiceResponse`. The response header `X-LoopGrid-Accepted` reports how many spans were mapped into LoopGrid decisions. LoopGrid's OTLP adapter preserves both current `gen_ai.provider.name` and the older `gen_ai.system` provider attribute when present.
+
+This ingestion compatibility does not change the LoopGrid evidence bundle, hash-chain, signing or offline-verifier contracts.
+
 ## Auth model
 
 Service API-key scopes:
@@ -166,7 +195,7 @@ In production mode v0.8 refuses startup when auth is disabled or bootstrap/platf
 
 ## Supported integrations
 
-Validated/foundation paths include REST, Python SDK, TypeScript/JavaScript SDK, OpenAI helper, Anthropic helper, LangGraph helper, OpenTelemetry/OTLP and allow-listed MCP proxy/ingestion.
+Validated/foundation paths include REST, Python SDK, TypeScript/JavaScript SDK, OpenAI helper, Anthropic helper, LangGraph helper, OpenTelemetry/OTLP HTTP (protobuf + JSON) and allow-listed MCP proxy/ingestion.
 
 The canonical LoopGrid evidence schema remains provider-neutral. Do not couple your historical evidence model to a single vendor's telemetry schema.
 
