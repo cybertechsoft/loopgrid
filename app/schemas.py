@@ -143,10 +143,6 @@ class ReplayResultResponse(BaseModel):
 class MCPIngestResponse(BaseModel):
     decision_id:str;idempotent_replay:bool;protocol:str
 
-class OTLPAcceptResponse(BaseModel):
-    model_config=ConfigDict(extra="allow")
-    partialSuccess:dict[str,Any]=Field(default_factory=dict);loopgrid:dict[str,Any]
-
 class PayloadEventStatusResponse(BaseModel):
     event_id:str;event_type:str;privacy_mode:str;payload:dict[str,Any]
 class PayloadStatusResponse(BaseModel):

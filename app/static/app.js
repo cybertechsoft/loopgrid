@@ -319,7 +319,7 @@ async function loadTrust(){
     if($('envSigner')) $('envSigner').textContent=sg.algorithm||sg.provider||'—';
     if($('envTsa')) $('envTsa').textContent=ts.tsa_url_configured?'Configured':'Not set';
     if($('envTsaSignal')) $('envTsaSignal').className='signal '+(ts.tsa_url_configured?'ok':'warn');
-    if($('sidebarVersion')) $('sidebarVersion').textContent='v'+String(info.version||'0.8.0').split('-')[0];
+    if($('sidebarVersion')) $('sidebarVersion').textContent='v'+String(info.version||'0.8.1').split('-')[0];
     if($('trustSigner')) $('trustSigner').textContent=sg.provider==='aws_kms'?'AWS KMS signing boundary':'Local Ed25519 signer';
     if($('trustSignerNote')) $('trustSignerNote').textContent=sg.hardware_backed?'Asymmetric signing is executed by the configured AWS KMS key.':'Zero-setup local signer for design-partner evaluation. Use KMS for a hardware-backed production boundary.';
     if($('trustAlgorithm')) $('trustAlgorithm').textContent=sg.algorithm||'—';
@@ -411,7 +411,7 @@ async function bootLoopGridUI(){
     });
 
     window.__loopgridBooted=true;
-    window.LoopGridUI={version:'0.8.0',loadWorkspace,refresh,verifyLedger,loadTrust};
+    window.LoopGridUI={version:'0.8.1',loadWorkspace,refresh,verifyLedger,loadTrust};
     await Promise.all([refresh(),loadTrust()]);
     console.info('[LoopGrid UI] v0.8 Design Partner Release ready');
   }catch(err){
