@@ -53,6 +53,39 @@ The append-only decision lifecycle includes `decision_created`, `model_completed
 - Optional live OpenAI/Anthropic replay/provider validation helpers.
 - Optional RFC3161 timestamp and AWS KMS adapter paths.
 
+## Fast local evaluation
+
+For a no-Docker, no-account evaluation path, install the repository dependencies once and run the cross-platform quickstart:
+
+```bash
+python -m pip install -r requirements.txt
+python scripts/quickstart.py
+```
+
+The quickstart uses an isolated temporary SQLite database and temporary local Ed25519 signer. It creates a synthetic refund decision with policy evaluation, human approval, tool execution and observed outcome, exports a portable evidence bundle, and verifies that bundle with an out-of-band trusted public key. It does not modify an existing LoopGrid database or deployment.
+
+Expected final output:
+
+```text
+[OK] Decision captured: dec_...
+[OK] Evidence exported: .../demo-output/evidence.zip
+[OK] Evidence coverage: 100%
+[OK] VERIFIED
+```
+
+Artifacts are written to `demo-output/` and are synthetic evaluation data only.
+
+## Container image
+
+The repository publishes a multi-platform development image from `main` to GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/cybertechsoft/loopgrid:edge
+docker run --rm -p 8000:8000 -v loopgrid_demo_data:/app/data ghcr.io/cybertechsoft/loopgrid:edge
+```
+
+Then open `http://127.0.0.1:8000/`. The `edge` tag tracks tested `main`; versioned and `latest` container tags are published from future GitHub releases. The default container invocation above is for local evaluation, not the production design-partner posture described below.
+
 ## Quickest design-partner deployment
 
 Requires Docker Desktop/Engine and Python 3.10+.
