@@ -24,6 +24,9 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m pytest -q
       - run: python -m py_compile app/*.py verifier/*.py
+      - name: Run quickstart smoke test
+        if: matrix.python-version == '3.12'
+        run: python scripts/quickstart.py --output-dir .quickstart-ci
 
   javascript-sdk:
     runs-on: ubuntu-latest
@@ -42,3 +45,19 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build LoopGrid image
         run: docker build -t loopgrid-ci .
+      - name: Smoke test container startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name loopgrid-ci-run -p 8000:8000 loopgrid-ci
+          trap 'docker rm -f loopgrid-ci-run >/dev/null 2>&1 || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8000/health > /tmp/loopgrid-health.json; then
+              cat /tmp/loopgrid-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'LoopGrid container did not become healthy in time.' >&2
+          docker logs loopgrid-ci-run >&2 || true
+          exit 1
