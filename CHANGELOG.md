@@ -1,3 +1,22 @@
+# Unreleased — Developer onboarding and container distribution
+
+## Added
+
+- Cross-platform `scripts/quickstart.py` local evaluation path using isolated SQLite state and a temporary local Ed25519 signer.
+- Quickstart exports `demo-output/evidence.zip` and independently verifies it against an out-of-band trusted public key.
+- GitHub Container Registry publishing workflow for `ghcr.io/cybertechsoft/loopgrid`.
+- Multi-platform container builds for `linux/amd64` and `linux/arm64`.
+- Docker build context hardening via `.dockerignore` so local secrets, keys, databases and generated artifacts are not copied into images.
+- CI now smoke-tests container startup and the `/health` endpoint after building the image.
+- `edge` container tag for tested `main`; future releases publish semantic-version and `latest` tags.
+
+## Compatibility
+
+- No evidence schema, signing, verifier, API, Python SDK or JavaScript SDK contract changes.
+- GitHub Marketplace verifier `v1.0.0` remains compatible.
+
+---
+
 # LoopGrid v0.8.1 — OTLP Interoperability
 
 ## Added / changed
