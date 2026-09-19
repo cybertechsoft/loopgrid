@@ -92,32 +92,38 @@ def run(output_dir: Path) -> int:
             print(f"[FAIL] Quickstart failed: {type(exc).__name__}: {exc}")
             return 1
 
+        verification_valid = bool(result.get("valid"))
+        failure_count = len(result.get("failures") or [])
+        warning_count = len(result.get("warnings") or [])
+        coverage_score = int((payload.get("coverage") or {}).get("score") or 0)
+
+        # Keep the machine-readable quickstart summary intentionally minimal.
+        # Verifier internals and key material/paths are not persisted or echoed here.
         summary = {
             "decision_id": decision_id,
             "workspace_id": payload["summary"].get("workspace_id"),
             "decision_type": payload["summary"].get("decision_type"),
-            "lifecycle": payload["summary"].get("lifecycle"),
-            "coverage": payload.get("coverage"),
-            "verification": result,
-            "artifacts": {
-                "evidence": str(bundle_path),
-                "trusted_public_key": str(trusted_key_path),
-            },
+            "coverage_score": coverage_score,
+            "verification_status": "VERIFIED" if verification_valid else "INVALID",
+            "failure_count": failure_count,
+            "warning_count": warning_count,
+            "evidence_file": bundle_path.name,
         }
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
         print(f"[OK] Decision captured: {decision_id}")
         print(f"[OK] Evidence exported: {bundle_path}")
         print(f"[OK] Trusted public key exported: {trusted_key_path}")
-        print(f"[OK] Evidence coverage: {payload['coverage']['score']}%")
-        if result.get("valid"):
+        print(f"[OK] Evidence coverage: {coverage_score}%")
+        if verification_valid:
             print("[OK] VERIFIED")
             print("     The exported bundle verified with an out-of-band trusted public key.")
             print(f"     Details: {summary_path}")
             return 0
 
         print("[FAIL] INVALID")
-        print(json.dumps(result, indent=2))
+        print(f"     Verifier reported {failure_count} failure(s) and {warning_count} warning(s).")
+        print(f"     Details: {summary_path}")
         return 2
 
 
