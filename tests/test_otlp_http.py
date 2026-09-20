@@ -258,4 +258,5 @@ def test_protobuf_ingested_evidence_remains_v1_verifier_compatible(tmp_path) -> 
     verified = verify_bundle(str(bundle))
     assert verified["valid"] is True
     assert verified["bundle_schema"] == "loopgrid/evidence-bundle/2"
+    assert verified["bundle_integrity"]["attested"] is True
     assert verified["signature_algorithm"] == "Ed25519"

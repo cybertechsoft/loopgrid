@@ -8,6 +8,7 @@ from .ledger import verify_ledger,event_to_dict
 from .models import LedgerEvent,PayloadBlob
 from .service import get_events,summarize_decision,evidence_coverage
 from .signing import signer
+from .crypto import canonical_json,sha256_hex
 from .version import VERSION,EVIDENCE_PROFILE
 from .checkpoints import latest_checkpoint_covering,checkpoint_to_dict
 
@@ -72,7 +73,7 @@ def _chain_witnesses(db, events, through_seq=None):
     ]
 
 def build_bundle(db:Session,decision_id:str,*,include_payloads:bool=True):
-    """Build Evidence Bundle v2 while preserving the v0.6-compatible core files.
+    """Build Evidence Bundle v2 with an additive signed file-attestation extension.
 
     The bundle deliberately separates: signed ledger proof, human-readable decision
     projection, signer identity, policy provenance, lifecycle projection, and optional
@@ -146,6 +147,7 @@ def build_bundle(db:Session,decision_id:str,*,include_payloads:bool=True):
         "signer":signer.posture(),
         "checkpoint":cp_json,
         "files":{
+            "decision":"decision.json",
             "signed_events":"events.jsonl",
             "chain_witnesses":"chain-witness.jsonl",
             "signer":"signer.json",
@@ -154,8 +156,16 @@ def build_bundle(db:Session,decision_id:str,*,include_payloads:bool=True):
             "policy":"policy/policy.json" if include_payloads and policy else None,
             "public_key":"public-key.pem",
             "report":"report.html",
+            "readme":"README.txt",
+            "bundle_attestation":"bundle-attestation.json",
             "disclosures":"disclosures.jsonl" if disclosures else None,
             "timestamp":"timestamp.tsr" if cp and cp.timestamp_token_b64 else None,
+        },
+        "bundle_integrity":{
+            "mode":"signed_file_attestation",
+            "attestation_schema":"loopgrid/bundle-attestation/1",
+            "attestation_file":"bundle-attestation.json",
+            "hash_algorithm":"SHA-256",
         },
         "independent_verification":"python loopgrid_verify.py evidence.zip",
         "cryptographic_profile":f"LoopGrid Evidence Profile {EVIDENCE_PROFILE}",
@@ -168,32 +178,68 @@ def build_bundle(db:Session,decision_id:str,*,include_payloads:bool=True):
     report_summary=summary if include_payloads else public_summary
     report_events=hydrated if include_payloads else events
     report=render_report(report_summary,report_events,verification,coverage)
+    readme=(
+        'LoopGrid Evidence Bundle v2\n\n'
+        'Verify integrity: python loopgrid_verify.py <bundle.zip>\n'
+        'Pin signer identity: python loopgrid_verify.py <bundle.zip> --expected-key-id <key-id>\n'
+        'or: python loopgrid_verify.py <bundle.zip> --trusted-public-key <public.pem>\n\n'
+        'No LoopGrid server connection is required. The embedded public key proves integrity under that key; '
+        'signer authenticity should be pinned out-of-band for high-assurance use.\n'
+        'This export includes a signed SHA-256 file attestation covering manifest.json and every other exported evidence file; the attestation itself is digitally signed.\n'
+        'FULL mode raw payloads are encrypted outside the signed ledger; disclosures.jsonl is optional and commitment-checked.\n'
+        'chain-witness.jsonl contains proof-only bridge nodes and no unrelated decision payloads.\n'
+        'verification.json records export-time server verification; always run the offline verifier independently when relying on the evidence.\n'
+    )
+
+    # Build every payload as bytes before writing the ZIP so the exact exported bytes can
+    # be hashed and covered by a signer-authenticated bundle attestation. The attestation
+    # is deliberately separate from the workspace checkpoint: checkpoints seal ledger
+    # state, while this export-time attestation seals the portable bundle representation.
+    payloads={
+        'decision.json':json.dumps(public_summary,indent=2,ensure_ascii=False).encode('utf-8'),
+        'events.jsonl':'\n'.join(json.dumps(e,ensure_ascii=False) for e in events).encode('utf-8'),
+        'chain-witness.jsonl':'\n'.join(json.dumps(w,ensure_ascii=False) for w in witnesses).encode('utf-8'),
+        'signer.json':json.dumps(signer_json,indent=2,ensure_ascii=False).encode('utf-8'),
+        'verification.json':json.dumps(verification_json,indent=2,ensure_ascii=False).encode('utf-8'),
+        'lifecycle.json':json.dumps(lifecycle,indent=2,ensure_ascii=False).encode('utf-8'),
+        'public-key.pem':signer.public_key_pem(),
+        'report.html':report.encode('utf-8'),
+        'README.txt':readme.encode('utf-8'),
+    }
+    if include_payloads and policy:
+        payloads['policy/policy.json']=json.dumps(policy,indent=2,ensure_ascii=False).encode('utf-8')
+    if disclosures:
+        payloads['disclosures.jsonl']='\n'.join(json.dumps(d,ensure_ascii=False) for d in disclosures).encode('utf-8')
+    if cp and cp.timestamp_token_b64:
+        payloads['timestamp.tsr']=base64.b64decode(cp.timestamp_token_b64)
+
+    manifest_bytes=json.dumps(manifest,indent=2,ensure_ascii=False).encode('utf-8')
+    attested_files={'manifest.json':sha256_hex(manifest_bytes)}
+    attested_files.update({name:sha256_hex(data) for name,data in payloads.items()})
+    attestation_body={
+        'attestation_schema':'loopgrid/bundle-attestation/1',
+        'bundle_schema':manifest['bundle_schema'],
+        'decision_id':decision_id,
+        'workspace_id':summary.get('workspace_id'),
+        'hash_algorithm':'SHA-256',
+        'files':attested_files,
+        'signer':{
+            'key_id':signer.key_id,
+            'algorithm':signer.algorithm,
+        },
+    }
+    attestation_digest=sha256_hex(canonical_json(attestation_body))
+    attestation={
+        **attestation_body,
+        'attestation_digest':attestation_digest,
+        'signature':signer.sign_hash(attestation_digest),
+    }
+    attestation_bytes=json.dumps(attestation,indent=2,ensure_ascii=False).encode('utf-8')
+
     buf=io.BytesIO()
     with zipfile.ZipFile(buf,'w',zipfile.ZIP_DEFLATED) as z:
-        z.writestr('manifest.json',json.dumps(manifest,indent=2,ensure_ascii=False))
-        z.writestr('decision.json',json.dumps(public_summary,indent=2,ensure_ascii=False))
-        z.writestr('events.jsonl','\n'.join(json.dumps(e,ensure_ascii=False) for e in events))
-        z.writestr('chain-witness.jsonl','\n'.join(json.dumps(w,ensure_ascii=False) for w in witnesses))
-        z.writestr('signer.json',json.dumps(signer_json,indent=2,ensure_ascii=False))
-        z.writestr('verification.json',json.dumps(verification_json,indent=2,ensure_ascii=False))
-        z.writestr('lifecycle.json',json.dumps(lifecycle,indent=2,ensure_ascii=False))
-        if include_payloads and policy:
-            z.writestr('policy/policy.json',json.dumps(policy,indent=2,ensure_ascii=False))
-        if disclosures:
-            z.writestr('disclosures.jsonl','\n'.join(json.dumps(d,ensure_ascii=False) for d in disclosures))
-        z.writestr('public-key.pem',signer.public_key_pem())
-        z.writestr('report.html',report)
-        if cp and cp.timestamp_token_b64:
-            z.writestr('timestamp.tsr',base64.b64decode(cp.timestamp_token_b64))
-        z.writestr('README.txt',
-            'LoopGrid Evidence Bundle v2\n\n'
-            'Verify integrity: python loopgrid_verify.py <bundle.zip>\n'
-            'Pin signer identity: python loopgrid_verify.py <bundle.zip> --expected-key-id <key-id>\n'
-            'or: python loopgrid_verify.py <bundle.zip> --trusted-public-key <public.pem>\n\n'
-            'No LoopGrid server connection is required. The embedded public key proves integrity under that key; '\
-            'signer authenticity should be pinned out-of-band for high-assurance use.\n'
-            'FULL mode raw payloads are encrypted outside the signed ledger; disclosures.jsonl is optional and commitment-checked.\n'
-            'chain-witness.jsonl contains proof-only bridge nodes and no unrelated decision payloads.\n'
-            'verification.json records export-time server verification; always run the offline verifier independently when relying on the evidence.\n'
-        )
+        z.writestr('manifest.json',manifest_bytes)
+        for name,data in payloads.items():
+            z.writestr(name,data)
+        z.writestr('bundle-attestation.json',attestation_bytes)
     return buf.getvalue(),f"loopgrid-evidence-{decision_id}.zip"
