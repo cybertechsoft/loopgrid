@@ -223,7 +223,7 @@ def verify_bundle(path:str,tsa_ca_file:str|None=None,expected_key_id:str|None=No
         bundle_integrity,bundle_failures,bundle_warnings=_verify_bundle_file_attestation(z,manifest,public,computed_key_id)
         failures.extend(bundle_failures);warnings.extend(bundle_warnings)
 
-        # For attested v3 bundles, authenticate the exact exported bytes before parsing
+        # For attested bundles, authenticate the exact exported bytes before parsing
         # auxiliary JSON/JSONL documents. This prevents malformed tampered files from
         # turning a clean verification failure into a parser exception.
         if (manifest.get('bundle_integrity') or {}).get('mode')=='signed_file_attestation' and bundle_failures:
