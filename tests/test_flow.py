@@ -435,18 +435,116 @@ def test_v07_policy_digest_and_input_commitment_are_deterministic_and_version_bo
     assert c['version']=='17.4' and c['policy_digest']!=a['policy_digest'] and c['input_commitment']==a['input_commitment']
 
 
-def test_v07_evidence_bundle_v2_contains_trust_lifecycle_policy_and_verifies(tmp_path):
+def test_evidence_bundle_v2_signed_file_attestation_verifies(tmp_path):
     reset();did=client.post('/api/v1/demo/refund').json()['summary']['decision_id']
     p=tmp_path/'v07-bundle.zip';p.write_bytes(client.get(f'/api/v1/decisions/{did}/evidence').content)
     import zipfile,json
     with zipfile.ZipFile(p) as z:
         names=set(z.namelist());manifest=json.loads(z.read('manifest.json'))
-        assert {'signer.json','verification.json','lifecycle.json','policy/policy.json','public-key.pem','events.jsonl','chain-witness.jsonl'} <= names
+        assert {'signer.json','verification.json','lifecycle.json','policy/policy.json','public-key.pem','events.jsonl','chain-witness.jsonl','decision.json','report.html','README.txt','bundle-attestation.json'} <= names
         assert manifest['bundle_schema']=='loopgrid/evidence-bundle/2' and manifest['version']=='3.0-draft'
         assert manifest['policy']['policy_digest'] and manifest['lifecycle']['state']=='evidence_complete'
     result=verify_bundle(str(p))
     assert result['valid'] is True and result['bundle_schema']=='loopgrid/evidence-bundle/2' and result['policy_digest']
+    assert result['bundle_integrity']['status']=='attested'
+    assert result['bundle_integrity']['attested'] is True
 
+
+
+def test_evidence_bundle_signed_attestation_detects_projection_and_auxiliary_file_tampering(tmp_path):
+    import io, zipfile
+
+    reset();did=client.post('/api/v1/demo/refund').json()['summary']['decision_id']
+    original=client.get(f'/api/v1/decisions/{did}/evidence').content
+
+    def rewrite(mutated_name=None,remove_name=None,extra_name=None):
+        src=zipfile.ZipFile(io.BytesIO(original))
+        out=io.BytesIO()
+        with src,zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as dst:
+            for info in src.infolist():
+                if info.filename==remove_name:
+                    continue
+                data=src.read(info.filename)
+                if info.filename==mutated_name:
+                    data=data+b'\nTAMPERED'
+                dst.writestr(info,data)
+            if extra_name:
+                dst.writestr(extra_name,b'unattested')
+        return out.getvalue()
+
+    for name in ('decision.json','report.html','verification.json','lifecycle.json','README.txt'):
+        p=tmp_path/f"tampered-{name.replace('/','-')}"
+        p.write_bytes(rewrite(mutated_name=name))
+        result=verify_bundle(str(p))
+        assert result['valid'] is False
+        assert any(f.get('reason')=='bundle_file_digest_mismatch' and f.get('file')==name for f in result['failures'])
+
+    removed=tmp_path/'missing-report.zip';removed.write_bytes(rewrite(remove_name='report.html'))
+    result=verify_bundle(str(removed))
+    assert result['valid'] is False
+    assert any(f.get('reason')=='attested_file_missing' and f.get('file')=='report.html' for f in result['failures'])
+
+    extra=tmp_path/'extra-file.zip';extra.write_bytes(rewrite(extra_name='untracked.txt'))
+    result=verify_bundle(str(extra))
+    assert result['valid'] is False
+    assert any(f.get('reason')=='unattested_archive_file' and f.get('file')=='untracked.txt' for f in result['failures'])
+
+
+def test_evidence_bundle_signed_attestation_detects_manifest_and_attestation_tampering(tmp_path):
+    import io, json, zipfile
+
+    reset();did=client.post('/api/v1/demo/refund').json()['summary']['decision_id']
+    original=client.get(f'/api/v1/decisions/{did}/evidence').content
+
+    def rewrite(name,transform):
+        src=zipfile.ZipFile(io.BytesIO(original));out=io.BytesIO()
+        with src,zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as dst:
+            for info in src.infolist():
+                data=src.read(info.filename)
+                if info.filename==name:data=transform(data)
+                dst.writestr(info,data)
+        return out.getvalue()
+
+    manifest_zip=tmp_path/'manifest-tampered.zip'
+    manifest_zip.write_bytes(rewrite('manifest.json',lambda raw: raw.replace(b'"legal_note"',b'"legal_note_tampered"',1)))
+    result=verify_bundle(str(manifest_zip))
+    assert result['valid'] is False
+    assert any(f.get('reason')=='bundle_file_digest_mismatch' and f.get('file')=='manifest.json' for f in result['failures'])
+
+    def alter_attestation(raw):
+        obj=json.loads(raw);obj['decision_id']='dec_tampered'
+        return json.dumps(obj,indent=2).encode()
+    attestation_zip=tmp_path/'attestation-tampered.zip'
+    attestation_zip.write_bytes(rewrite('bundle-attestation.json',alter_attestation))
+    result=verify_bundle(str(attestation_zip))
+    assert result['valid'] is False
+    assert any(f.get('reason') in {'bundle_attestation_decision_mismatch','bundle_attestation_digest_mismatch','bundle_attestation_signature_invalid'} for f in result['failures'])
+
+
+def test_legacy_unattested_bundle_v2_remains_ledger_verifiable_with_warning(tmp_path):
+    import io, json, zipfile
+
+    reset();did=client.post('/api/v1/demo/refund').json()['summary']['decision_id']
+    original=client.get(f'/api/v1/decisions/{did}/evidence').content
+    src=zipfile.ZipFile(io.BytesIO(original));out=io.BytesIO()
+    with src,zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as dst:
+        for info in src.infolist():
+            if info.filename=='bundle-attestation.json':
+                continue
+            data=src.read(info.filename)
+            if info.filename=='manifest.json':
+                manifest=json.loads(data)
+                manifest['bundle_schema']='loopgrid/evidence-bundle/2'
+                manifest.pop('bundle_integrity',None)
+                manifest.get('files',{}).pop('bundle_attestation',None)
+                data=json.dumps(manifest,indent=2,ensure_ascii=False).encode('utf-8')
+            dst.writestr(info,data)
+    p=tmp_path/'legacy-v2.zip';p.write_bytes(out.getvalue())
+    result=verify_bundle(str(p))
+    assert result['valid'] is True
+    assert result['bundle_integrity']['status']=='legacy_unattested'
+    assert result['bundle_integrity']['attested'] is False
+    assert any(w.get('reason')=='bundle_file_attestation_unavailable' for w in result['warnings'])
 
 def test_v07_request_body_limit_and_system_posture_are_exposed():
     # Content-Length is checked before parsing the body, providing an inexpensive abuse guard.
