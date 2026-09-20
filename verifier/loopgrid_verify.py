@@ -83,20 +83,177 @@ def _signed_body(e):
     return {k:e.get(k) for k in ["event_id","decision_id","workspace_id","event_type","occurred_at","actor","privacy_mode","payload_commitment","payload"]}
 
 
+def _verify_bundle_file_attestation(z,manifest,public,computed_key_id):
+    failures=[];warnings=[]
+    bundle_schema=manifest.get('bundle_schema')
+    result={
+        "status":"legacy_unattested",
+        "attested":False,
+        "attestation_schema":None,
+        "hash_algorithm":None,
+        "files_checked":0,
+        "signature_valid":None,
+        "attestation_digest_valid":None,
+    }
+    integrity_declared=manifest.get('bundle_integrity') or {}
+    attestation_expected=(
+        integrity_declared.get('mode')=='signed_file_attestation'
+        or 'bundle-attestation.json' in z.namelist()
+    )
+    if not attestation_expected:
+        warnings.append({
+            "reason":"bundle_file_attestation_unavailable",
+            "detail":"Legacy/unattested bundle: signed ledger verification is available, but exported file bytes are not covered by a bundle-level file attestation.",
+        })
+        return result,failures,warnings
+
+    try:
+        attestation=json.loads(z.read('bundle-attestation.json'))
+    except KeyError:
+        failures.append({"reason":"bundle_attestation_missing"})
+        result["status"]="invalid"
+        return result,failures,warnings
+    except Exception as exc:
+        failures.append({"reason":"bundle_attestation_unreadable","detail":type(exc).__name__})
+        result["status"]="invalid"
+        return result,failures,warnings
+
+    result["attestation_schema"]=attestation.get('attestation_schema')
+    result["hash_algorithm"]=attestation.get('hash_algorithm')
+    if attestation.get('attestation_schema')!='loopgrid/bundle-attestation/1':
+        failures.append({"reason":"bundle_attestation_schema_invalid","attestation_schema":attestation.get('attestation_schema')})
+    if attestation.get('bundle_schema')!=bundle_schema:
+        failures.append({"reason":"bundle_attestation_bundle_schema_mismatch"})
+    if attestation.get('decision_id')!=manifest.get('decision_id'):
+        failures.append({"reason":"bundle_attestation_decision_mismatch"})
+    if attestation.get('workspace_id')!=manifest.get('workspace_id'):
+        failures.append({"reason":"bundle_attestation_workspace_mismatch"})
+    if attestation.get('hash_algorithm')!='SHA-256':
+        failures.append({"reason":"bundle_attestation_hash_algorithm_invalid","algorithm":attestation.get('hash_algorithm')})
+
+    declared_signer=attestation.get('signer') or {}
+    if declared_signer.get('key_id')!=computed_key_id:
+        failures.append({
+            "reason":"bundle_attestation_key_id_mismatch",
+            "attestation_key_id":declared_signer.get('key_id'),
+            "computed_key_id":computed_key_id,
+        })
+    manifest_key_id=(manifest.get('signer') or {}).get('key_id') or (manifest.get('integrity') or {}).get('key_id')
+    if manifest_key_id and declared_signer.get('key_id')!=manifest_key_id:
+        failures.append({"reason":"bundle_attestation_manifest_key_id_mismatch"})
+
+    body={k:attestation.get(k) for k in [
+        'attestation_schema','bundle_schema','decision_id','workspace_id','hash_algorithm','files','signer'
+    ]}
+    computed_attestation_digest=sha256_hex(canonical_json(body))
+    declared_digest=attestation.get('attestation_digest')
+    result["attestation_digest_valid"]=declared_digest==computed_attestation_digest
+    if not result["attestation_digest_valid"]:
+        failures.append({
+            "reason":"bundle_attestation_digest_mismatch",
+            "computed":computed_attestation_digest,
+            "declared":declared_digest,
+        })
+
+    algorithm=declared_signer.get('algorithm') or (manifest.get('signer') or {}).get('algorithm') or 'Ed25519'
+    result["signature_valid"]=_verify_sig(public,algorithm,computed_attestation_digest,attestation.get('signature',''))
+    if not result["signature_valid"]:
+        failures.append({"reason":"bundle_attestation_signature_invalid","algorithm":algorithm})
+
+    files=attestation.get('files')
+    if not isinstance(files,dict) or not files:
+        failures.append({"reason":"bundle_attestation_files_missing"})
+        files={}
+    if 'manifest.json' not in files:
+        failures.append({"reason":"bundle_attestation_manifest_digest_missing"})
+    if 'bundle-attestation.json' in files:
+        failures.append({"reason":"bundle_attestation_self_reference"})
+
+    archive_names=[n for n in z.namelist() if not n.endswith('/')]
+    if len(archive_names)!=len(set(archive_names)):
+        failures.append({"reason":"duplicate_archive_entry"})
+    archive_set=set(archive_names)
+    expected_set=set(files)|{'bundle-attestation.json'}
+    for missing in sorted(expected_set-archive_set):
+        failures.append({"reason":"attested_file_missing","file":missing})
+    for extra in sorted(archive_set-expected_set):
+        failures.append({"reason":"unattested_archive_file","file":extra})
+
+    for name,declared_hash in sorted(files.items()):
+        if not isinstance(name,str) or not isinstance(declared_hash,str):
+            failures.append({"reason":"bundle_attestation_file_entry_invalid","file":str(name)})
+            continue
+        try:
+            raw=z.read(name)
+        except KeyError:
+            continue
+        actual=sha256_hex(raw)
+        result["files_checked"]+=1
+        if actual!=declared_hash:
+            failures.append({
+                "reason":"bundle_file_digest_mismatch",
+                "file":name,
+                "computed":actual,
+                "declared":declared_hash,
+            })
+
+    manifest_files=manifest.get('files') or {}
+    for role,name in manifest_files.items():
+        if not name:
+            continue
+        if name=='bundle-attestation.json':
+            continue
+        if name not in files:
+            failures.append({"reason":"manifest_file_not_attested","role":role,"file":name})
+
+    result["attested"]=not failures
+    result["status"]='attested' if result["attested"] else 'invalid'
+    return result,failures,warnings
+
+
 def verify_bundle(path:str,tsa_ca_file:str|None=None,expected_key_id:str|None=None,trusted_public_key:str|None=None)->dict:
     failures=[];warnings=[]
     with zipfile.ZipFile(path) as z:
         manifest=json.loads(z.read('manifest.json'))
-        events=_lines(z,'events.jsonl');witnesses=_lines(z,'chain-witness.jsonl');disclosures=_lines(z,'disclosures.jsonl')
-        signer_doc=_json_file(z,'signer.json')
-        verification_doc=_json_file(z,'verification.json')
-        lifecycle_doc=_json_file(z,'lifecycle.json')
-        policy_doc=_json_file(z,'policy/policy.json')
         bundled_pem=z.read('public-key.pem');public=serialization.load_pem_public_key(bundled_pem)
         computed_key_id=_public_key_id(public);manifest_key_id=(manifest.get('signer') or {}).get('key_id') or (manifest.get('integrity') or {}).get('key_id')
         bundle_schema=manifest.get('bundle_schema')
         if bundle_schema and bundle_schema!='loopgrid/evidence-bundle/2':
             warnings.append({"reason":"unknown_bundle_schema","bundle_schema":bundle_schema})
+        bundle_integrity,bundle_failures,bundle_warnings=_verify_bundle_file_attestation(z,manifest,public,computed_key_id)
+        failures.extend(bundle_failures);warnings.extend(bundle_warnings)
+
+        # For attested v3 bundles, authenticate the exact exported bytes before parsing
+        # auxiliary JSON/JSONL documents. This prevents malformed tampered files from
+        # turning a clean verification failure into a parser exception.
+        if (manifest.get('bundle_integrity') or {}).get('mode')=='signed_file_attestation' and bundle_failures:
+            return {
+                "valid":False,"events":0,"witnesses":0,"disclosures":0,
+                "failures":failures,"warnings":warnings,
+                "decision_id":manifest.get('decision_id'),"workspace_id":manifest.get('workspace_id'),
+                "software_version":manifest.get('software_version'),"evidence_profile":manifest.get('version'),
+                "bundle_schema":bundle_schema,
+                "signature_algorithm":manifest.get('signer',{}).get('algorithm') or manifest.get('integrity',{}).get('signature_algorithm'),
+                "key_identity":{
+                    "computed_key_id":computed_key_id,
+                    "manifest_key_id":manifest_key_id,
+                    "manifest_match":not manifest_key_id or computed_key_id==manifest_key_id,
+                    "expected_key_id":expected_key_id,
+                    "expected_key_match":None if expected_key_id is None else computed_key_id==expected_key_id,
+                    "trusted_public_key_supplied":bool(trusted_public_key),
+                    "trusted_public_key_match":None,
+                    "trust_note":"An embedded public key proves bundle integrity under that key. Pin --expected-key-id or --trusted-public-key when signer identity/authenticity must be established out of band."
+                },
+                "bundle_integrity":bundle_integrity,"checkpoint":{"present":False,"signature_valid":None,"linked_to_bundle_chain":None},
+                "timestamp":{"present":'timestamp.tsr' in z.namelist(),"imprint_valid":None,"trust_validated":None},
+                "lifecycle":manifest.get('lifecycle'),"policy_digest":(manifest.get('policy') or {}).get('policy_digest')
+            }
+
+        events=_lines(z,'events.jsonl');witnesses=_lines(z,'chain-witness.jsonl');disclosures=_lines(z,'disclosures.jsonl')
+        signer_doc=_json_file(z,'signer.json')
+        verification_doc=_json_file(z,'verification.json')
+        lifecycle_doc=_json_file(z,'lifecycle.json')
+        policy_doc=_json_file(z,'policy/policy.json')
         if signer_doc and signer_doc.get('key_id') and signer_doc.get('key_id')!=computed_key_id:
             failures.append({"reason":"signer_document_key_id_mismatch","signer_key_id":signer_doc.get('key_id'),"computed_key_id":computed_key_id})
         if lifecycle_doc is not None and manifest.get('lifecycle') is not None and lifecycle_doc!=manifest.get('lifecycle'):
@@ -212,7 +369,7 @@ def verify_bundle(path:str,tsa_ca_file:str|None=None,expected_key_id:str|None=No
             "trusted_public_key_match":trusted_key_match,
             "trust_note":"An embedded public key proves bundle integrity under that key. Pin --expected-key-id or --trusted-public-key when signer identity/authenticity must be established out of band."
         }
-        return {"valid":not failures,"events":len(events),"witnesses":len(witnesses),"disclosures":len(disclosures),"failures":failures,"warnings":warnings,"decision_id":manifest.get('decision_id'),"workspace_id":manifest.get('workspace_id'),"software_version":manifest.get('software_version'),"evidence_profile":manifest.get('version'),"bundle_schema":manifest.get('bundle_schema') or 'legacy','signature_algorithm':manifest.get('signer',{}).get('algorithm') or manifest.get('integrity',{}).get('signature_algorithm'),"key_identity":key_identity,"checkpoint":checkpoint,"timestamp":timestamp,"lifecycle":manifest.get('lifecycle'),"policy_digest":(manifest.get('policy') or {}).get('policy_digest')}
+        return {"valid":not failures,"events":len(events),"witnesses":len(witnesses),"disclosures":len(disclosures),"failures":failures,"warnings":warnings,"decision_id":manifest.get('decision_id'),"workspace_id":manifest.get('workspace_id'),"software_version":manifest.get('software_version'),"evidence_profile":manifest.get('version'),"bundle_schema":manifest.get('bundle_schema') or 'legacy','signature_algorithm':manifest.get('signer',{}).get('algorithm') or manifest.get('integrity',{}).get('signature_algorithm'),"key_identity":key_identity,"bundle_integrity":bundle_integrity,"checkpoint":checkpoint,"timestamp":timestamp,"lifecycle":manifest.get('lifecycle'),"policy_digest":(manifest.get('policy') or {}).get('policy_digest')}
 
 
 def main():
@@ -226,7 +383,13 @@ def main():
     # redirected to a subprocess pipe may inherit a legacy code page that cannot
     # encode Unicode check/cross glyphs even though verification itself succeeded.
     print('LOOPGRID EVIDENCE VERIFICATION')
-    print('[OK] VERIFIED' if r['valid'] else '[FAIL] INVALID')
+    if r['valid'] and (r.get('bundle_integrity') or {}).get('attested'):
+        print('[OK] VERIFIED')
+    elif r['valid']:
+        print('[OK] LEDGER VERIFIED')
+        print('[WARN] Legacy/unattested bundle: exported file bytes are not covered by a signed bundle attestation.')
+    else:
+        print('[FAIL] INVALID')
     print(json.dumps(r,indent=2))
     raise SystemExit(0 if r['valid'] else 2)
 
