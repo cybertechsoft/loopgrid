@@ -35,7 +35,7 @@ The append-only decision lifecycle includes `decision_created`, `model_completed
 - `Content-Encoding: gzip` is supported for OTLP/HTTP trace requests.
 - OTLP success responses now use the standard `ExportTraceServiceResponse` encoding and match the request `Content-Type`.
 - Decoded OTLP request bodies are bounded by `LOOPGRID_MAX_REQUEST_BODY_BYTES` to limit decompression expansion.
-- Existing evidence, signing, bundle and verifier formats are unchanged from v0.8.0.
+- Evidence Bundle v2 remains compatible and now supports the additive signed `loopgrid/bundle-attestation/1` extension for cryptographic file-level integrity; legacy unattested Bundle v2 exports remain ledger-verifiable with an explicit warning.
 
 ## v0.8 highlights
 
@@ -165,19 +165,52 @@ TypeScript declarations ship with the npm package.
 
 ## Independent verification
 
-Export an evidence ZIP, then verify it without a running LoopGrid service:
+LoopGrid evidence bundles can be verified offline without running or connecting to a LoopGrid service.
 
-```powershell
-python verifier\loopgrid_verify.py evidence.zip
+Install the canonical standalone verifier:
+
+```bash
+python -m pip install loopgrid-verify==0.1.0
 ```
 
-For stronger out-of-band signer identity verification:
+Verify an exported evidence bundle using an out-of-band trusted public key:
 
-```powershell
-python verifier\loopgrid_verify.py evidence.zip --expected-key-id ed25519:...
+```bash
+loopgrid-verify evidence.zip \
+  --trusted-public-key trusted-public-key.pem
 ```
 
-Portable consistency proof and signer trust are separate concepts. A bundle can be internally valid while the verifier still needs an out-of-band reason to trust the signer identity.
+A valid attested bundle returns:
+
+```text
+LOOPGRID EVIDENCE VERIFICATION
+[OK] VERIFIED
+[DETAIL] Bundle integrity: attested
+```
+
+A modified attested file causes verification to fail with exit code `2`.
+
+Signer identity can also be pinned explicitly:
+
+```bash
+loopgrid-verify evidence.zip \
+  --expected-key-id ed25519:...
+```
+
+Current portable evidence identifiers:
+
+- **Evidence Bundle v2:** `loopgrid/evidence-bundle/2`
+- **Evidence Profile:** `3.0-draft`
+- **Bundle attestation:** `loopgrid/bundle-attestation/1`
+- **Canonical verifier:** `loopgrid-verify`
+
+Evidence Bundle v2 exports with bundle attestation cryptographically bind the exported files using SHA-256 digests and a signed bundle attestation. Modified, missing or unexpected attested files are rejected.
+
+Older Evidence Bundle v2 exports without bundle-level file attestation remain ledger-verifiable and are reported explicitly as `legacy_unattested`.
+
+Portable consistency proof and signer trust are separate concepts. An embedded public key can establish integrity under that key, but signer identity should be established out of band with `--trusted-public-key` or `--expected-key-id` when authenticity matters.
+
+Verification confirms the integrity of the captured evidence. It does not determine whether an AI decision was correct or establish legal compliance.
 
 ## Privacy model
 
@@ -186,7 +219,6 @@ Portable consistency proof and signer trust are separate concepts. A bundle can 
 - **PROOF-ONLY** — only commitment/proof metadata retained.
 
 Encrypted disclosures can be erased later without rewriting the signed evidence chain.
-
 
 ## OTLP/HTTP trace ingestion
 
